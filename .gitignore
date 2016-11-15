@@ -5,6 +5,8 @@
 # Session Data files
 .RData
 
+#Markdown Files
+*.rmd
 #R Data Files
 *.rds
 
