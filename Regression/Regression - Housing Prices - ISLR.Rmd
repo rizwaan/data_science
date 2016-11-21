@@ -1,0 +1,50 @@
+---
+title: "Regression - Stanform ML Course"
+author: "Rizwaan Adil"
+date: "November 18, 2016"
+output: html_document
+
+---
+
+[Source](https://lagunita.stanford.edu/courses/HumanitiesSciences/StatLearning/Winter2016/courseware/85b01caa12834b0dbaeff232fb77e123/00b646c1309e42f2b8c1a770516fdef4/)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/adilr/OneDrive - Hewlett Packard Enterprise/Work/Learning/Data Science/data_science/Regression")
+```
+
+####Package Management
+
+```{r packages, warning=FALSE}
+
+library(ISLR)
+library(MASS)
+
+
+```
+
+#### Load data 
+
+```{r Load Boston Data}
+names(Boston)
+head(Boston)
+summary(Boston) 
+```
+
+#### Regression Modeling
+
+```{r Regression Modeling}
+plot(medv~lstat,Boston)
+
+model1<-lm(medv~lstat,data = Boston)
+summary(model1)
+confint(model1)
+predict(model1,data.frame(lstat=c(5,10,15)))
+```
+
+
+
+```{r Regression Plots}
+plot(model1)  
+```
+
