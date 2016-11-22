@@ -38,3 +38,8 @@ vignettes/*.pdf
 *.exe
 *.bat
 *.com
+
+# RMarkdown Output Files
+*.docx
+*.pdf
+*.html
