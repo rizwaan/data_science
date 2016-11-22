@@ -1,9 +1,11 @@
 ---
-title: "Regression - Stanform ML Course"
+title: "Regression - Stanford ML Course"
 author: "Rizwaan Adil"
 date: "November 18, 2016"
-output: html_document
-
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
 ---
 
 [Source](https://lagunita.stanford.edu/courses/HumanitiesSciences/StatLearning/Winter2016/courseware/85b01caa12834b0dbaeff232fb77e123/00b646c1309e42f2b8c1a770516fdef4/)
@@ -44,7 +46,78 @@ predict(model1,data.frame(lstat=c(5,10,15)))
 
 
 
+### Residual Analysis
+
+
+
+Couple of charts that help understand the accuracy of the model.
+
 ```{r Regression Plots}
+layout(matrix(c(1,2,3,4),2,2))
 plot(model1)  
 ```
+
+#### Residuals vs Fitted chart
+
+- This should show no patterns in the plot. Any pattern or relationship means model is not a good fit.
+- Random pattern means model fits the data well.
+- If a pattern like U or inverse U is found, a non linear model or transformation is suggested.
+- [Source](http://stattrek.com/regression/residual-analysis.aspx?Tutorial=AP)
+- [Interactive Residual analysis](http://docs.statwing.com/interpreting-residual-plots-to-improve-your-regression/#outlier-header)
+- A non-random pattern in the residuals indicates that the deterministic portion (predictor variables) of the model is not capturing some explanatory information that is “leaking” into the residuals. The graph could represent several ways in which the model is not explaining all that is possible. Possibilities include:
+
+    - A missing variable
+    - A missing higher-order term of a variable in the model to explain the curvature
+    - A missing interaction between terms already in the model
+    - Source:[REsidual ANalysis](http://blog.minitab.com/blog/adventures-in-statistics/why-you-need-to-check-your-residual-plots-for-regression-analysis)
+
+
+#### Normal Q-Q Plot
+
+- Used to test the assumption of normality of residuals
+- Must overlay perfectly with the THeoretical Quantiles.
+- An S curve indicates a need for Box - Cox transformation. [Source](http://blog.minitab.com/blog/statistics-and-quality-improvement/see-how-easily-you-can-do-a-box-cox-transformation-in-regression)
+- Curve means data is skewed or there are more extreme values than expected. [Source](http://data.library.virginia.edu/understanding-q-q-plots/)
+
+
+#### Scale Location Plot
+
+- It’s good if you see a horizontal line with equally (randomly) spread points.
+- THis plot should look random.. no patterns
+- This plot shows if residuals are spread equally along the ranges of predictors. 
+- This is how you can check the assumption of equal variance (homoscedasticity). 
+- [Source](http://data.library.virginia.edu/diagnostic-plots/)
+
+
+
+#### Leverage Plot
+
+- This  plot (Cook’s distance) tells us which points have the greatest influence on the regression (leverage points)
+- Action : Remove the outliers and do the modeling again. 
+- [Source](http://www.theanalysisfactor.com/linear-models-r-diagnosing-regression-model/)
+
+
+#### Relevant Excerpt from an [article](http://stats.stackexchange.com/questions/28688/how-to-interpret-model-diagnostics-when-doing-linear-regression-in-r)
+
+>Proper OLS-estimated regression modeling (which is what the lm command runs) requires several assumptions, and these >diagnostic plots are designed to test them.
+
+>The "Residuals vs Fitted" and "Scale-Location" charts are essentially the same, and show if there is a trend to the >residuals. OLS models require that the residuals be "identically and independently distributed," that their distribution >does not change substantially for different values of xx. None of your charts is really satisfactory on this regard. If >this assumption is not met, your ββ estimates will still be good, but your tt-statistics, and corresponding pp-values, >are garbage.
+
+>Another assumption is that the errors are approximately normally distributed, which is what the Q-Q plot allows you to >see. Again, none of your plots really satisfies me in this regard. The consequences of this assumption not being met are >the same as above (ββ's good, tt's worthless).
+
+>The "outliers" principle is actually not an assumption of OLS regression. But if you have outliers in certain locations, >your ββ parameters will be unduly influenced by them. In this case, both your ββ and tt measurements are useless. You can >remove an influential observation from a data frame by identifying its row number and issuing the command
+
+>data <- data[-offending.row,]
+
+
+Additional Resources
+
+[R Squared](http://blog.minitab.com/blog/adventures-in-statistics/how-high-should-r-squared-be-in-regression-analysis)
+
+
+
+
+
+
+
 
