@@ -1,0 +1,7 @@
+
+
+This repo contains code excercises for ...
+
+**MOOC** : Building Data Visualization Tools  
+**Link** : [Building Data Visualization Tools](https://www.coursera.org/learn/r-data-visualization/home/week/1)  
+**Date Started** : 3 Jan '17

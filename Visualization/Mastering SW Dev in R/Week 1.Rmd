@@ -1,0 +1,75 @@
+---
+title: "Week 1 - Building Data Visualization Tools"
+author: "Rizwaan Adil"
+date: "January 3, 2017"
+output: html_document
+
+---
+
+[Mooc Link](https://www.coursera.org/learn/r-data-visualization/supplement/1FG1D/initializing-a-ggplot-object)  
+[Referenced Book](https://bookdown.org/rdpeng/RProgDA/basic-plotting-with-ggplot2.html#initializing-a-ggplot-object)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Package Management
+
+Install necessary packages 
+
+```{r , warning=FALSE}
+library("magrittr", lib.loc="~/R/win-library/3.3") ## Need to explicitly load it due to version conflict
+library(ggplot2)
+library(titanic)
+library(faraway)
+
+```
+
+***
+
+#### Dataset prep
+
+```{r}
+
+data("titanic_train")
+titanic<-titanic_train
+data("worldcup")
+world_cup<-worldcup
+
+names(titanic)
+
+```
+
+***
+
+#### ggplot Modus Operandi
+
+
+The basic steps behind creating a plot with ggplot2 are:  
+
+1. Create an object of the ggplot class, typically specifying the data and some or all of the aesthetics;  
+2. Add on geoms and other elements to create and customize the plot, using +  
+
+__Aesthetics__  
+1. Properties of the plots which are mapped to the variables to actually create the plot
+2. Which aesthetics are required for a plot depend on which geoms you’re adding to the plot( try ?geom_point) 
+
+
+***
+
+#### Creating a basic plot
+
+Note: Do not start a line with the + sign
+
+```{r}
+
+
+
+titanic %>%
+  ggplot()+
+  geom_histogram(aes(x=Fare))
+
+```
+
+
+
