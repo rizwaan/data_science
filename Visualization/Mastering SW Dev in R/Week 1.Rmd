@@ -13,15 +13,17 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 #### Package Management
 
 Install necessary packages 
 
-```{r , warning=FALSE}
+```{r , warning=FALSE, message=FALSE}
 library("magrittr", lib.loc="~/R/win-library/3.3") ## Need to explicitly load it due to version conflict
 library(ggplot2)
 library(titanic)
 library(faraway)
+library(dplyr)
 
 ```
 
@@ -57,9 +59,17 @@ __Aesthetics__
 
 ***
 
+
+### Basic Plotting
+
+***
+
+
 #### Creating a basic plot
 
-Note: Do not start a line with the + sign
+Notes: 
+ 1. Do not start a line with the + sign
+ 2. Always use the aes() call to specify the properties\aesthetics of the plots. It is not recommended to do it anywhere else (possible but not recommended)
 
 ```{r}
 
@@ -69,7 +79,200 @@ titanic %>%
   ggplot()+
   geom_histogram(aes(x=Fare))
 
+
+titanic %>%
+  ggplot(aes(x=Fare))+
+  geom_histogram()
+
+
+
+```
+
+
+***
+
+#### Geoms
+
+Notes
+
+ 1. Functions that add graphical elements to the plot
+ 2. Every function differs in arguments
+ 
+
+```{r, warning=FALSE}
+
+titanic %>% 
+  ggplot(aes(x=Fare))+
+  geom_histogram(bins = 15)
+
+```
+
+
+__Scatterplot__
+
+```{r, warning=FALSE}
+
+world_cup %>% 
+  ggplot(aes(x=Time, y=Passes, color=Position, size= Shots ))+
+  geom_point()
+
+```
+
+***
+
+#### Multiple Geoms
+
+Use multiple geoms to create several layers of info
+
+
+__Ex.1__ : Adding point labels to a scatterplot
+
+```{r, warning=FALSE}
+
+##head(world_cup)
+
+world_cup %>% 
+  filter(Shots==max(Shots) | Passes==max(Passes)) %>% 
+  mutate(pt_label=paste(Team,Position, sep=" , "))->gp
+
+
+
+world_cup %>% 
+  ggplot(aes(x=Passes,y=Shots))+
+  geom_point()+
+  geom_text(data=gp,aes(label=pt_label),vjust="inward",hjust="inward")
+
+
+
+```
+
+
+__Ex.2__ : Adding intercept lines
+
+
+```{r, warning=FALSE}
+
+world_cup %>% 
+  ggplot(aes(x=Time))+
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = 90*0:6,
+             color="red", alpha=0.9)
+
+
+```
+
+***
+
+#### Extensions to GGPlot
+
+
+
+Data prep
+
+```{r, warning=FALSE}
+nepali <- nepali %>%
+  select(id, sex, wt, ht, age) %>%
+  mutate(id = factor(id),
+         sex = factor(sex, levels = c(1, 2),
+                      labels = c("Male", "Female"))) %>%
+  distinct(id, .keep_all = TRUE)
+
+head(nepali)
+
+```
+
+
+Pair Plot
+
+
+```{r, warning=FALSE, message=FALSE}
+
+library(GGally)
+
+ggpairs(nepali %>% select(sex, wt, ht,age))
+
+```
+
+***
+
+### Customizing ggplot2 Plots
+
+***
+
+#### Guidlines for Good Plots
+
+>1. Aim for high data density.  
+>2. Use clear, meaningful labels.  
+>3. Provide useful references.  
+>4. Highlight interesting aspects of the data.  
+>5. Consider using small multiples.  
+>6. Make order meaningful.  
+
+
+
+Data Prep
+
+```{r , message=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(ggthemes)
+library(dlnm)
+library(faraway)
+
+
+data(nepali)
+data(worldcup)
+data(chicagoNMMAPS)
+chic <- chicagoNMMAPS
+chic_july <- chic %>%
+  filter(month == 7 & year == 1995)
+
+
+```
+
+
+ >High data density
+ 
+ ***
+
+If an element of the plot is redundant, take it out.
+You should try to increase, as much as possible, the data to ink ratio in your graphs
+
+
+
+ 
+ 
+```{r, message=FALSE}
+
+world_cup %>% 
+  ggplot(aes(x=Time, y= Shots))+
+  geom_point()+
+  theme_classic()
+
+
+
+
+world_cup %>% 
+  ggplot(aes(x=Time, y= Shots))+
+  geom_point()+
+  theme_tufte()
+
 ```
 
 
 
+
+
+ > Meaningful Labels
+ 
+ ***
+ 
+ Do not use obscure acronyms
+ 
+ 
+ 
+ 
+ 
+ 
