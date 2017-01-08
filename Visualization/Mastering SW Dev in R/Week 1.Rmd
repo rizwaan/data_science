@@ -271,8 +271,113 @@ world_cup %>%
  
  Do not use obscure acronyms
  
+ 1. Use xlab and ylab fx to change the axis labels
+ 2. If the x-variable requires longer labels, use coord_flip
  
  
  
+ > Provide References  
+ 
+ ***
+ 
+ Use geom_smooth to show a reference curve
  
  
+ > Highlighting
+ 
+ 
+ Use geom_text 
+ 
+ 
+ > Small Multiples
+ 
+ 
+ Use faceting wherever possible
+ 
+ 
+ Sample plot
+ 
+```{r}
+
+
+
+world_cup %>% 
+  ggplot(aes(x=Time,y=Shots,color=Position))+
+  geom_point()
+
+
+```
+Better Version
+
+
+facet_grid : Can facet by max 2 variables
+
+```{r}
+
+
+world_cup %>% 
+  filter(Team %in% c("Spain","Netherlands")) %>% 
+  ggplot(aes(x=Time,y=Shots))+
+  geom_point()+
+  facet_grid(Team~Position)
+
+```
+
+Facet_wrap can facet by one or more variables  and it “wraps” the small graphs, so they don’t all have to be in one row or column.
+Use it when a factor has a lot of levels
+
+
+```{r}
+
+world_cup %>% 
+  ggplot(aes(x = Time, y = Shots)) +
+  geom_point()+
+  facet_wrap(~Team,ncol = 8)
+  
+           
+
+```
+
+
+
+For renaming and ordering factor levels use the factor function
+The plot will follow the order of the labals as specified in the factor function
+
+
+```{r, message=FALSE,warning=FALSE}
+
+nepali %>% 
+  mutate(sex=factor(
+    sex,
+    levels=c(2,1),
+    labels=c("Female","Male")
+  )) %>% 
+  ggplot(aes(ht,wt))+
+  geom_point()+
+  facet_grid(.~sex)
+
+
+```
+
+> Make Order Meaningful
+
+***
+
+
+```{r}
+
+world_cup %>% 
+  group_by(Team) %>% 
+  summarise(mean_time=mean(Time)) %>% 
+  arrange(mean_time) %>% 
+  mutate(Team=factor(
+    Team,
+    levels=Team
+  )) %>% 
+  ggplot(aes(mean_time,Team))+
+  geom_point()
+  
+  
+
+```
+
