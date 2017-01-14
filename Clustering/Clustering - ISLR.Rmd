@@ -1,0 +1,244 @@
+---
+title: "Clustering - ISLR"
+author: "Rizwaan Adil"
+date: "January 14, 2017"
+output: html_document
+
+---
+
+***
+
+[Source](https://lagunita.stanford.edu/courses/HumanitiesSciences/StatLearning/Winter2016/courseware/b6e69c3c9239444085f6a8a186cab4cc/7c87061bd65545dd82377ae89cfa4a5a/)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<br>
+<br>
+
+***
+
+#### Principal Components Analysis
+
+<br>
+
+- Used to reduce high dimensional data  
+- Useful when a large number of features are present.  
+- Captures variance of features and provides a linear combination of features called Principal Components (PC)  
+- PCs are mutually orthogonal .. there is no overlap in terms of variance of features  
+- Coefficients in linear combination are called loadings  
+- Used as an intermediate technique before regression etc.  
+
+<br>
+<br>
+
+***
+
+
+
+US Arrests Data
+```{r}
+head(USArrests)
+
+
+```
+
+<br>
+Each row is a state, each column is a crime category  
+
+```{r}
+
+dimnames(USArrests) 
+
+```
+
+<br>
+Means and variances of the crime categories
+
+
+```{r}
+apply(USArrests,2,mean)
+apply(USArrests,2,var)
+
+```
+
+
+Note that Assault has a large variance . If PCA is applied PC1 will be entirely comprised of assault.  
+To avoid this we need to standardize the dataset to have unit variance  
+To do this set scale=TRUE
+
+```{r}
+
+pca.out<-prcomp(USArrests,scale = TRUE)
+pca.out 
+
+```
+<br>
+Interpretation:
+
+- PC1 has high loadings for crimes but lower on UrbanPop. 
+- We can conclude that PC1 signifies all the crimes.
+- PC2 has a high loading for UrbanPop. hence it essentially signifies UrbanPop
+- Note that the negative signs do not matter as the variance is agnostic of signs
+
+
+<br>
+
+Visualizing principal components using the biplot
+
+```{r}
+
+biplot(pca.out,scale = 0,cex=0.6)
+
+```
+
+
+
+<br>
+Interpretation
+<br>
+
+- Crimes (M, A , R) variation is captured almost entirely by PC1 
+- PC2 captures most of the variation in UrbanPop
+
+
+
+
+
+
+
+
+
+***
+
+#### K-Means  Clustering
+
+Generate some fake data with clear clustering
+
+```{r}
+
+set.seed(101)
+x<-matrix(rnorm(100*2),100,2)
+xmean<-matrix(rnorm(8,sd=4),4,2)
+cluster_index<-sample(1:4,100,replace = TRUE)
+x<-x+xmean[cluster_index,]
+head(x)
+plot(x,col=cluster_index,pch=19)
+```
+
+
+<br>
+Use K-Means to cluster this data  
+
+```{r}
+
+km.out<-kmeans(x,centers=4,nstart = 15)
+km.out
+
+```
+
+Interpretation:  
+- The line (between_SS / total_SS =  87.6 %) means 87% of variance is explained by this model   
+- More info can be obtained by exploring the components  
+
+
+Plot the output  
+
+- Outer circles are KM output
+- Inner dots are original clusters
+- Mismatching color means a wrong cluster identification
+
+```{r}
+plot(x,col=km.out$cluster,cex=2,pch=1,lwd=2)
+points(x,col=cluster_index,pch=19) # Overlay the original data and original clusters for comparison
+points(x,col=c(4,3,2,1)[cluster_index],pch=19)
+
+```
+
+***
+
+#### Hierarchical Clustering
+
+<br>
+
+##### Notes
+
+- No need to choose K beforehand  
+- Eventual result is a dendogram which presents all the clusters in one shot  
+- Appropriate no of clusters is determined by pruning the dendogram at the longest branch  
+- Works by employing a distance metric between two observations  
+- Common distance metrics  
+    - Euclidean  
+    - Manhattan etc  
+- Another paramter to be considered is the linkage (from where are the distances measured)    
+    - Complete : Farthest points are used  
+    - SIngle : Closest points are used   
+    - Average : Average of the distances is used
+    - ![Linkage Types](http://compbio.pbworks.com/f/linkages.JPG)
+
+- __Correlation based distance__ is sometimes used for time series style data (same variable measured over diff time periods)  
+    - Uses correlation between observations  
+    - Usually correlation is used for variables  
+    - Highly correlated observations are clubbed in the same cluster  
+- Scaling matters
+    - If variables are not in the same unit, standardize them
+- For H Clustering alway be clear about
+    - Choice of metric
+    - Choice of linkare
+
+
+<br>
+<br>
+
+Using the same fake data generated earlier, use hClust  
+Diff linkages provide diff output
+
+```{r }
+
+par(mfrow = c(1, 3))
+
+hc.out<-hclust(dist(x),method = "complete") ## dist function generates the euclidean distances by default. Can be modified
+plot(hc.out,cex=0.75)
+
+hc.out1<-hclust(dist(x),method = "single")
+plot(hc.out1,cex=0.75)
+
+
+hc.out2<-hclust(dist(x),method = "average")
+plot(hc.out2,cex=0.75)
+
+```
+
+
+
+
+<br>
+
+
+Compare the hclust output with original clusters  
+
+```{r}
+hc.cut<-cutree(hc.out,4) ## Cutree gives and index of cluster numbers for each row. 
+table(cluster_index)  ## Original cluser numbers
+table(hc.cut,cluster_index) ## Comparison
+
+```
+
+<br>
+comparison with K-Means output  
+
+```{r}
+
+table(hc.cut,km.out$cluster)
+
+```
+
+<br>
+
+Diff ways of plotting the clustering output
+
+```{r}
+plot(hc.out,labels = cluster_index,cex=0.75)
+```
+
