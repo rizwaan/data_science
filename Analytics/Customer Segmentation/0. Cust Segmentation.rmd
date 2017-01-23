@@ -1,0 +1,183 @@
+---
+title: "0. Customer Segmentation with R"
+author: "Rizwaan Adil"
+date: "January 3, 2017"
+output: html_document
+
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+***
+Project Description :Segmentation using K Means and PCA  
+Source              : [Rpubs](https://rpubs.com/hrbrmstr/customer-segmentation-r) |
+
+
+#### Package Management
+***
+
+```{r , message=FALSE}
+
+library(readxl)    # free data from excel hades
+library(dplyr)     # sane data manipulation
+library(tidyr)     # sane data munging
+library(viridis)   # sane colors
+library(ggplot2)   # needs no introduction
+library(ggfortify) # super-helpful for plotting non-"standard" stats objects
+
+```
+
+***
+
+#### Data Prep
+***
+
+Download data from url
+
+```{r}
+
+url<-"http://blog.yhathq.com/static/misc/data/WineKMC.xlsx"
+
+filename<-basename(url)
+
+if (!file.exists(filename))   download.file(url, filename)
+
+
+```
+
+  
+<br>
+Read in the file and rename columns
+
+```{r}
+
+offers<-read_excel(filename,sheet=1)
+colnames(offers)
+
+colnames(offers) <- c("offer_id", "campaign", "varietal", "min_qty", "discount", "origin", "past_peak")
+
+colnames(offers)
+
+head(offers)
+```
+
+
+
+
+Second dataset
+
+
+```{r}
+
+transactions <- read_excel(filename, sheet = 2)
+colnames(transactions) <- c("customer_name", "offer_id")
+transactions$n <- 1
+
+head(transactions)
+
+```
+
+<br>
+Join and transform data to wide form
+
+```{r}
+
+left_join(offers,transactions,by="offer_id") %>%  #join the tables
+  count(customer_name,offer_id,wt=n) %>%               #group by customer and offer
+  spread(offer_id,nn) %>%                              #pivot
+  mutate_each(funs(ifelse(is.na(.),0,.))) -> raw
+
+raw
+
+
+```
+***
+
+#### Clustering
+
+<br>
+Using K - Means
+
+
+```{r}
+
+fit<-kmeans(raw[,-1],centers = 5,iter.max = 1000)
+table(fit$cluster)
+
+```
+
+
+
+Plot the cluster info
+```{r}
+
+
+barplot(table(fit$cluster),col = "steelblue4")
+```
+
+
+***
+#### Visualization of Clusters
+
+Group customers by the offers they responded to..
+
+```{r}
+
+pca <- prcomp(raw[,-1])
+
+pca_dat <- mutate(fortify(pca), col=fit$cluster) ## Consilidates the PCA loadings and cluster info for easier plotting
+
+ggplot(pca_dat) +
+  geom_point(aes(x=PC1, y=PC2, fill=factor(col)), size=3, col="#7f7f7f", shape=21) +
+  scale_fill_viridis(name="Cluster", discrete=TRUE) + theme_bw()
+```
+
+Same visualization with autoplot function for clarity
+
+```{r}
+
+autoplot(fit,data=raw[,-1],frame=TRUE,frame.type="norm")
+
+autoplot(fit,data=raw[,-1],frame=TRUE,frame.type="norm")
+
+```
+
+
+***
+#### Exploring the original data with cluster info
+
+Now that we have the clusters.. we might want to explore the data by cluster id.  
+This way we can subset the original data and find interesting subgroups..
+
+e.g.. lets pick out customers falling in the cluster no 4 and relevant details
+
+
+
+
+```{r}
+
+
+transactions %>% 
+  left_join(data_frame(customer_name=raw$customer_name,cluster=fit$cluster)) %>% 
+  left_join(offers) -> customer_clusters  ## give all the customers and clusters
+
+
+## pick out cluster no 4 
+
+customer_clusters %>% 
+  mutate(is_4=(cluster==4)) %>% 
+  count(is_4,varietal)
+  
+
+```
+
+***
+
+#### Summary
+
+- PCA and Kmeans was used to cluster the customers by their response to marketing campaigns
