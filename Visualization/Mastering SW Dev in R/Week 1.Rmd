@@ -13,7 +13,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-***
 
 #### Package Management
 
@@ -365,7 +364,7 @@ nepali %>%
 ***
 
 
-```{r , message=FALSE}
+```{r}
 
 world_cup %>% 
   group_by(Team) %>% 
@@ -376,8 +375,8 @@ world_cup %>%
     levels=Team
   )) %>% 
   ggplot(aes(mean_time,Team))+
-  geom_point()+
-  theme_fivethirtyeight()
+  geom_point()
+  
   
 
 ```
