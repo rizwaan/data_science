@@ -1,0 +1,131 @@
+---
+title: "K Fold Cross Validation with Caret"
+author: "Rizwaan Adil"
+date: "January 31, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+***
+>Objective : Demo caret package usage for K Fold Cross Validation
+
+***
+#### Package Management
+
+
+<br>
+Load required packages and check the data
+```{r, message=FALSE}
+
+library(caret)
+library(kernlab)
+data(spam)
+head(spam)
+
+```
+
+Here the variable to be predicted is __type__ which identies a spam or ham message
+
+
+***
+#### Data Slicing Operations 
+***
+
+##### Splitting the data into test and training sets
+
+
+- Splitting is done using the __CreateDataPartition__ Function
+- It returns an index which is used to create test and training sets
+
+```{r, message=FALSE}
+dim(spam)
+trainIndex<-createDataPartition(y = spam$type,p=0.75,list=FALSE,times = 1) # Use the type column ; 75% data goes to training, return a matrix
+head(trainIndex)
+
+
+
+```
+
+An index with 4601 rows (same as original dataset) is returned with sampled row names
+
+<br>
+
+Create test and training sets using the index
+
+```{r}
+training<-spam[trainIndex,]
+dim(training)
+
+test<-spam[-trainIndex,]
+dim(test)
+
+
+```
+
+Rows in training set:  3451
+Rows in test set : 1150
+
+
+##### K Folds
+
+<br> 
+- Used for performing K fold cross validation
+- Done using __createFolds__ function
+
+```{r, message=FALSE}
+
+set.seed(123)
+
+folds<-createFolds(y=spam$type,k=10,list = TRUE,returnTrain = FALSE) # Return a list of folds , return only the test set
+
+sapply(folds,length)
+```
+
+<br>
+Review the individual elements in a  fold
+
+```{r}
+folds$Fold01[1:10]
+
+```
+
+
+
+<br>
+##### Resampling for Bootrstrapping 
+<br>
+
+```{r}
+
+set.seed(123)
+
+samples<-createResample(y=spam$type,times = 10,list = TRUE) # Return a list of 10 resamples ; with replacement
+
+sapply(samples,length)
+
+
+```
+
+
+<br>
+Accessing individual elements
+
+```{r}
+samples$Resample01[1:10]
+```
+
+
+
+
+
+
+
+
+
+
+####__Resources__
+- [Practical Machine Learning](https://www.coursera.org/learn/practical-machine-learning/lecture/0vwNS/training-option)
+- [Resampling Methods](https://lagunita.stanford.edu/courses/HumanitiesSciences/StatLearning/Winter2016/courseware/9956347366744e1cac95f513e9235f9f/9339db132f504f809056f221271d9795/)
