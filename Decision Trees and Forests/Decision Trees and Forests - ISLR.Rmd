@@ -1,0 +1,140 @@
+---
+title: "Decision Trees and Forests"
+author: "Rizwaan Adil"
+date: "February 7, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+[Source](https://lagunita.stanford.edu/courses/HumanitiesSciences/StatLearning/Winter2016/courseware/4cd5971758e84840b24d91c763df6ce8/e9481751b91d4f25b7a6d98fa5b7d371/)
+
+***
+#### Package Management
+```{r,  message=FALSE}
+library(ISLR)
+library(tree)
+
+```
+
+
+***
+#### Data Manipulation
+```{r}
+
+attach(Carseats)
+hist(Sales,breaks = 15)
+
+
+
+```
+
+Create a categorical response from Sales column
+```{r}
+High=ifelse(Sales>8,"Yes","No")
+Carseats=data.frame(Carseats,High)
+head(Carseats)
+```
+
+<br>
+
+***
+#### Fit Tree Model
+
+Exclude Sales from the model
+```{r}
+m.tree=tree(High~.-Sales,data=Carseats)
+summary(m.tree)
+plot(m.tree)
+text(m.tree,pretty = 0)
+```
+
+
+Look at the details.. 
+- Lots of terminal nodes
+```{r}
+
+m.tree
+```
+
+
+#### Use model for prediction
+
+
+```{r}
+set.seed(1011)
+
+## Test Train Split. There are 400 observation. 250 for training set
+## Get an index
+train= sample(1:nrow(Carseats),size = 250)
+
+#Generate a tree model using training set
+m1tree = tree(High~.-Sales
+              ,data = Carseats
+              ,subset = train)
+plot(m1tree);text(m1tree,pretty=0)
+
+
+
+```
+
+<br>
+Predict using the test set
+```{r}
+
+m1tree.pred=predict(m1tree,newdata = Carseats[-train,],type = "class")
+
+##Generate the confusion matrix
+with(Carseats[-train,], table(m1tree.pred,High))
+
+#Accuracy is 70%
+(72+33)/150
+```
+
+***
+#### Pruning the tree
+
+Using cross validation, prune the tree to a better size.
+Then regrow the tree on the original data to compare with first model
+
+
+Find the best size of the tree without sacrificing much of accuracy
+
+```{r}
+cv.carseats<-cv.tree(m1tree,FUN=prune.misclass) # Use miscalssificate error to prune the tree
+cv.carseats
+plot(cv.carseats)
+
+```
+
+The misclass error bottoms out at about 10. 
+This provides a guidance about pruning the original tree for the best size
+
+
+Time to prune the tree
+
+```{r}
+prune.m1tree= prune.misclass(m1tree,best = 13)
+plot(prune.m1tree);text(prune.m1tree,pretty=0)
+
+```
+
+This tree is far less bushy and quite interpretable
+
+Now use this pruned model to predict again
+
+```{r}
+final.tree.pred=predict(prune.m1tree,newdata = Carseats[-train,],type = "class")
+with(Carseats[-train,], table(final.tree.pred,High))
+
+## Accuracy = 69 %
+(72+32)/150
+
+```
+
+
+Thus, by pruning the tree we have a more interpretable tree with just a 1% drop in accuracy
