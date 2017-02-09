@@ -18,6 +18,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r,  message=FALSE}
 library(ISLR)
 library(tree)
+library(dplyr)
 
 ```
 
@@ -54,13 +55,15 @@ text(m.tree,pretty = 0)
 ```
 
 
-Look at the details.. 
-- Lots of terminal nodes
-```{r}
+Look at the details..   
+- More than 20 nodes here.. making it unintuitive.  
 
+Detailed summary of the tree
+```{r}
 m.tree
 ```
 
+<br>
 
 #### Use model for prediction
 
@@ -138,3 +141,180 @@ with(Carseats[-train,], table(final.tree.pred,High))
 
 
 Thus, by pruning the tree we have a more interpretable tree with just a 1% drop in accuracy
+
+
+
+****
+
+#### Random Forests and Boosting
+
+
+#####Load packages
+
+```{r, message=FALSE}
+require(randomForest)
+require(MASS)
+
+
+```
+
+<br>
+
+##### Data Management
+
+Response variable is medv
+```{r}Bo
+dim(Boston) # 500 rows
+names(Boston)
+
+```
+<br>
+
+##### Split data
+
+```{r}
+train.rf=sample(1:nrow(Boston),300) # 300 out of 500 as training set
+
+
+
+```
+
+
+##### Fit Model
+
+```{r}
+rf.boston=randomForest(medv~.,data = Boston,subset = train.rf)
+rf.boston
+
+```
+
+>Note that the mtry(no of variables to select from for a split at each node is 4 .. approx close to sqrt of total variables(13))   
+>Also the MSR and %Var explained are computed using [OOB estimates](https://en.wikipedia.org/wiki/Out-of-bag_error)
+>By default 500 trees are fit
+
+Plot the model  
+
+```{r}
+plot(rf.boston)
+
+```
+
+
+Error flattens out at around 100 trees.
+
+
+##### Effect of varying the mtry component on the test error  
+
+Capture OOB error and test error by varying mtry in the rf model
+
+```{r}
+oob.err=double(13)
+test.err= double(13)
+
+for (mtry in 1:13){
+  fit=randomForest(formula = medv~.
+                   ,data = Boston
+                   ,subset = train.rf
+                   ,mtree=400
+                   ,mtry=mtry)
+  oob.err[mtry]=fit$mse[400] # Last item of the mse component is the overall MSE; same logic for getting the R squared .. use fit$rsq
+  pred=predict(fit,Boston[-train.rf,])
+  test.err[mtry]=with(Boston[-train.rf,],mean((medv-pred)^2))
+  cat(mtry," ")
+}
+  
+
+```
+
+
+Plot the errors
+
+```{r}
+matplot(1:mtry,cbind(test.err,oob.err),pch = 19, col = c("red", "blue"), type = "b", ylab = "Mean Squared Error")
+
+
+legend("topright", legend = c("OOB", "Test"), pch = 19, col = c("red", "blue"))
+
+```
+
+At mtry = 4 we have a good mix of low error and low complexity for the RF model.
+
+
+***
+#### Boosting
+
+
+Boosting works by building a lot of shallow trees and employs error based weights during bagging for prediction  
+
+##### Package Management
+```{r}
+
+
+require(gbm)
+
+```
+
+
+##### Fit the boosting model to Boston data
+
+```{r, message=FALSE}
+
+gbm.fit<-gbm(formula = medv~.
+             ,data = Boston[train.rf,]
+             ,interaction.depth = 5
+             ,n.trees = 10000
+             ,shrinkage = .01)
+
+summary(gbm.fit)
+
+```
+>Tip: Use cross validation to adjust the parameters.
+>In Azure ML use the Tune HyperParameters module
+
+
+Plot the response vs top 2 variables
+
+```{r}
+par(mfrow=c(1,2))
+plot(gbm.fit,i="lstat") # relation bw lstat (low status income group) and medv is invversely proportional
+plot(gbm.fit,i="rm") # direct relation between number of rooms in the house and the price
+```
+
+##### Prediction using Boosting model
+
+Plot test error for different values of the tree parameter
+
+```{r}
+num_trees<-seq(100,10000,100)
+predmat<-predict(gbm.fit
+                 ,newdata = Boston[-train.rf,]
+                 ,n.trees = num_trees) # This model will return a matrix 
+dim(predmat)
+head(predmat,2) # 206 rows of predicion for different number of trees on columns
+
+```
+<br>
+Calculate the RMS error  
+Note that predmat is a matrix and medv is a vector. 
+Output would be a matrix  
+
+
+```{r}
+boost.err<-with(Boston[-train.rf,]
+     ,apply((predmat-medv)^2,2,mean) )
+
+boost.err # RMS for every n.tree value
+
+```
+
+Plot the errors vs the tree num
+
+```{r}
+par(mfrow=c(1,2))
+plot(num_trees,boost.err) ##Boosting Model
+matplot(1:mtry,cbind(test.err,oob.err),pch = 19, col = c("red", "blue"), type = "b", ylab = "Mean Squared Error") ## RF Model
+```
+
+As see here optimum number of trees is about 3000.
+Also the error range is below 10.. lower than RF model
+
