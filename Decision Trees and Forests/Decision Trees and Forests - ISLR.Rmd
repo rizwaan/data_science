@@ -315,6 +315,6 @@ plot(num_trees,boost.err) ##Boosting Model
 matplot(1:mtry,cbind(test.err,oob.err),pch = 19, col = c("red", "blue"), type = "b", ylab = "Mean Squared Error") ## RF Model
 ```
 
-As see here optimum number of trees is about 3000.
+As seen here, optimum number of trees is about 3000.
 Also the error range is below 10.. lower than RF model
 
