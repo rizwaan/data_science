@@ -1,0 +1,235 @@
+---
+title: "SVMs"
+author: "Rizwaan Adil"
+date: "February 15, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Support Vector Machines
+
+[Source](https://lagunita.stanford.edu/c4x/HumanitiesSciences/StatLearning/asset/ch9.html)
+
+<br>
+
+Demo for   
+- Linear Classifier   
+- Non Linear Classfier using radial kernel  
+
+
+*** 
+#### Linear SVM Classifier
+
+The cryptically named package e1071 is used for SVM implementation in R.  
+Trivia : e1071 is a room number in Berlin Technical University where this package was developed.  
+
+
+##### Package Management
+
+```{r, message=FALSE}
+
+
+library(e1071)
+
+```
+
+
+##### Data Manipulation
+
+Generate some random data with mean close to 0
+
+```{r}
+set.seed(10111)
+x<-matrix(rnorm(40),20,2)
+summary(x)
+
+```
+
+Class label index
+
+```{r}
+y<-rep(c(-1,1),c(10,10))
+y
+
+```
+
+
+Shift the mean of x matrix for first 10 observations for creating an artificial boundary
+
+```{r}
+par(mfrow=c(1,2))
+plot(x,col=y+3,pch=19, main="Before")
+
+x[y==1,]=x[y==1,]+1
+
+plot(x,col=y+3,pch=19, main="After")
+```
+
+
+##### Fit linear svm model
+
+
+Here Cost\Budget\Tuning Parameter is wht decides the discount on the margin.  
+The more discount the wider the margin and more points are allowed to hope over to the wrong side.  
+Use cross validation to determine an accurate number  
+
+```{r}
+dat<-data.frame(x,y=as.factor(y))
+
+svmfit<-svm(y~.
+            , data = dat
+            ,kernel= "linear"
+            ,cost=10                     # Tuning parameter
+            ,scale = FALSE)                # scaling not required at the moment
+print (svmfit)
+
+```
+
+Plot the svm fit
+
+```{r}
+plot(svmfit,data = dat)
+```
+
+This plot can be improved vastly.  
+- Doesnt show the actual support vectors  
+- Axes are reversed   
+
+
+Create a new plot function
+
+```{r}
+# Utility function to create a grid on which we can plot the svm fit
+
+make.grid=function(x,n=75){
+  grange=apply(x,2,range)
+  x1=seq(from=grange[1,1],to=grange[2,1],length=n)
+  x2=seq(from=grange[1,2],to=grange[2,2],length=n)
+  expand.grid(X1=x1,X2=x2)
+  }
+
+xgrid=make.grid(x)
+ygrid=predict(svmfit,xgrid)
+plot(xgrid,col=c("red","blue")[as.numeric(ygrid)],pch=20,cex=.2)
+points(x,col=y+3,pch=19)
+points(x[svmfit$index,],pch=5,cex=2)
+
+```
+
+This plot shows all the 6 support vectors.   
+
+
+Add the margins to this plot
+
+
+```{r}
+
+beta=drop(t(svmfit$coefs)%*%x[svmfit$index,])
+beta0=svmfit$rho
+plot(xgrid,col=c("red","blue")[as.numeric(ygrid)],pch=20,cex=.2)
+points(x,col=y+3,pch=19)
+points(x[svmfit$index,],pch=5,cex=2)
+abline(beta0/beta[2],-beta[1]/beta[2])
+abline((beta0-1)/beta[2],-beta[1]/beta[2],lty=2)
+abline((beta0+1)/beta[2],-beta[1]/beta[2],lty=2)
+
+```
+
+
+
+***
+#### Non Linear SVM 
+
+Demo : Get some non linear data and use svm to model it
+
+
+##### Non Linear Data and its plot
+
+Get the mixture data from ESL by the same authors
+
+```{r}
+rm(x,y) # remove the old matrix data
+
+load(url("http://www.stanford.edu/~hastie/ElemStatLearn/datasets/ESL.mixture.rda"))
+names(ESL.mixture)
+
+```
+
+
+This is a list structure
+
+```{r}
+str(ESL.mixture)
+```
+
+The data's plot reveal its non - linear nature.  
+Clear overlap between the two classes  
+
+```{r, message=FALSE}
+attach(ESL.mixture)
+plot(x,col=y+1, pch=19)
+
+```
+
+
+##### Non Linear SVM fit
+
+Fit a svm model using radial kernel
+
+```{r}
+
+dat1= data.frame(x, y= factor(y))
+radial_fit=svm(y~., data = dat1
+               ,kernel="radial"
+               ,scale=FALSE
+               ,cost=5)
+
+
+
+  
+```
+
+Basic plot again
+
+```{r}
+
+plot(radial_fit,dat1)
+
+```
+
+
+##### Plot the non linear SVM fit
+
+Better plot
+
+
+```{r}
+xgrid=expand.grid(X1=px1,X2=px2)
+ygrid=predict(radial_fit,xgrid)
+plot(xgrid,col=as.numeric(ygrid),pch=20,cex=.1)
+points(x,col=y+1,pch=19)
+
+```
+
+
+Include the actual boundaries too
+
+
+```{r}
+
+func=predict(radial_fit,xgrid,decision.values=TRUE)
+func=attributes(func)$decision
+xgrid=expand.grid(X1=px1,X2=px2)
+ygrid=predict(radial_fit,xgrid)
+plot(xgrid,col=as.numeric(ygrid),pch=20,cex=.2)
+points(x,col=y+1,pch=19)
+
+contour(px1,px2,matrix(func,69,99),level=0,add=TRUE)
+contour(px1,px2,matrix(prob,69,99),level=.5,add=TRUE,col="blue",lwd=2)
+
+```
+
+
