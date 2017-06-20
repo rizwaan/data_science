@@ -1,0 +1,381 @@
+---
+title: "Text Mining with R - Chapter 3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+[Source : Text Mining With R](http://tidytextmining.com/tidytext.html#the-unnest_tokens-function)
+
+## Analyzing word and document frequency: tf-idf
+
+An intro to TF IDF statistic
+
+
+***
+### Term frequency in Jane Austen’s novels
+
+What are the most commonly used words in her novels
+
+```{r}
+
+library(dplyr)
+library(janeaustenr)
+library(tidytext)
+
+
+book_words <-austen_books() %>% 
+  unnest_tokens(word,text) %>% 
+  count(book,word,sort=TRUE)
+  ## Removing ungroup to understand its impact
+
+
+
+total_words<-book_words %>% 
+  group_by(book) %>% 
+  summarise(total=sum(n))
+
+
+book_words<-left_join(book_words,total_words)
+book_words
+
+```
+
+
+Here n/total would be the term frequency for a word
+Below is a plot
+
+
+```{r,message=FALSE}
+library(ggplot2)
+
+ggplot(book_words,aes(n/total,fill=book))+
+  geom_histogram(show.legend = FALSE)+
+  facet_wrap(~book,ncol=2,scales="free_y")+
+  xlim(NA,0.0008)
+
+```
+
+Long tail implies words that are rarely used.
+
+
+***
+### Zipf’s law
+
+Zipf’s law states that the frequency that a word appears is inversely proportional to its rank.
+
+Lets plot the term frequency with rank of the words for previous dataframe
+
+```{r,message=FALSE}
+
+library(dplyr)
+
+freq_by_rank<-book_words %>%
+  group_by(book) %>% 
+  mutate(rank=row_number()
+         , termFreq=n/total) 
+
+freq_by_rank  
+  
+```
+
+
+Lets demonstrate Zipf's Law by plotting the term freq and the rank on a log scale
+
+```{r}
+
+freq_by_rank %>% 
+  ggplot(aes(rank,termFreq,color=book))+
+  geom_line(size=1.2,alpha=0.8)+
+  scale_y_log10()+
+  scale_x_log10()
+  
+
+```
+
+As expected termfreq and  rank are inversely proportional across allfreq_by_rank.
+
+We can further retrieve the coeff of a regression line to quantify it.
+
+
+```{r}
+
+rank_subset<-freq_by_rank %>% 
+  filter(rank<500,rank>10)
+
+lm(log10(termFreq)~log10(rank),data=rank_subset)
+
+```
+
+The negative slope indicates a solid inverse relationship between rank and TF.
+
+
+Lets plot it over the previous graph
+
+```{r}
+
+freq_by_rank %>% 
+  ggplot(aes(rank,termFreq,color=book))+
+  geom_line(size=1.2,alpha=0.8)+
+  geom_abline(intercept = -0.62, slope = -1.1, color = "gray50", linetype = 2) +
+  scale_y_log10()+
+  scale_x_log10()
+  
+  
+  
+
+```
+
+The deviations we see here at high rank are not uncommon for many kinds of language; a corpus of language often contains fewer rare words than predicted by a single power law. The deviations at low rank are more unusual. Jane Austen uses a lower percentage of the most common words than many collections of language
+
+
+
+***
+### The bind_tf_idf function
+
+
+TidyText provides a handy function to calculate tfidf directly
+
+
+```{r}
+#book_words # base table with word freq and total words
+
+
+## Add tf idf to base table
+book_words<-book_words %>% 
+  bind_tf_idf(word,book,n)
+
+book_words
+
+```
+
+
+Note that tfidf is 0 for very common words.  
+Rare words have a higher tfidf.
+
+
+
+Lets look at high tfidf words
+
+```{r}
+book_words %>% 
+  select(-total) %>% 
+  arrange(desc(tf_idf)) 
+
+
+
+```
+
+Lets plot these high tfidf words
+
+
+```{r}
+
+plot_austen <- book_words %>% 
+  arrange(desc(tf_idf)) %>% 
+  mutate(word=factor(word,levels=rev(unique(word))))
+
+
+plot_austen %>% 
+  top_n(20) %>% 
+  ggplot(aes(word,tf_idf,color=book))+
+  geom_col()+
+  coord_flip()+
+   labs(x = NULL, y = "tf-idf") 
+  
+
+```
+
+
+
+Lets plot the words by book
+
+
+```{r, message=FALSE}
+
+plot_austen %>% 
+  group_by(book) %>% 
+  top_n(15) %>% 
+  ungroup() %>%
+  ggplot(aes(word, tf_idf, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  labs(x = NULL, y = "tf-idf") +
+  facet_wrap(~book,ncol=3,nrow = 2,scales="free")+
+  coord_flip()
+
+
+
+```
+
+This brings up a lot words which are quite informative for the specific novel.
+What measuring tf-idf has done here is show us that Jane Austen used similar language across her six novels, and what distinguishes one novel from the rest within the collection of her works are the proper nouns, the names of people and places.   
+This is the point of tf-idf; it identifies words that are important to one document within a collection of documents.
+
+
+***
+### A corpus of physics texts
+
+Lets attempt all the previous analysis on a set of Physics papers.  
+
+Below papers will be downloaded
+
+Title                                                                     Author
+-----                                                                     ------
+Discourse on Floating Bodies                                              Galileo Galilei
+Treatise on Light                                                         Christiaan Huygens
+Experiments with Alternate Currents of High Potential and High Frequency  Tesla
+Relativity : the Special and General Theory                               Albert Einstein
+
+
+Note that these works span around 300 years and some of them were originally published in non English languages
+
+```{r}
+
+library(gutenbergr)
+physics <- gutenberg_download(c(37729, 14725, 13476, 5001), 
+                              meta_fields = "author")
+
+physics
+```
+
+Lets tokenize these works
+
+
+```{r}
+
+physics_words<- physics %>% 
+  unnest_tokens(word,text) %>% 
+  count(author,word,sort=TRUE) %>% 
+  ungroup() #remove the groupings introduced by count
+
+physics_words  
+
+```
+
+
+
+Lets introduce the tf idf statistic to this dataset
+
+
+```{r}
+
+
+physics_words <- physics_words %>% 
+  bind_tf_idf(word,author,n)
+
+physics_words
+```
+
+
+Lets plot the high tfidf words
+
+```{r}
+
+plot_physics <- physics_words %>% 
+  arrange(desc(tf_idf)) %>% 
+  mutate(word=factor(word,levels=rev(unique(word)))) %>% 
+  mutate(author=factor(author,levels=c("Galilei, Galileo",
+                                            "Huygens, Christiaan", 
+                                            "Tesla, Nikola",
+                                            "Einstein, Albert")))
+  
+  
+
+plot_physics
+
+```
+
+
+
+Now plot the top 20 words 
+
+```{r,message=FALSE}
+
+library(ggthemes)
+
+plot_physics %>% 
+  top_n(20) %>% 
+  ggplot(aes(word,tf_idf,color=author))+
+  geom_col()+
+  coord_flip()+
+  theme_fivethirtyeight()
+  
+
+```
+
+Lets plot the works by authors
+
+
+```{r}
+
+
+plot_physics %>% 
+  group_by(author) %>% 
+  top_n(20,tf_idf) %>% 
+  ungroup() %>% 
+  mutate(word=reorder(word,tf_idf)) %>% 
+  ggplot(aes(word,tf_idf,color=author))+
+  geom_col()+
+  coord_flip()+
+  facet_wrap(~author,ncol=2,scales = "free")+
+  theme_fivethirtyeight()
+
+
+```
+
+Above plot shows some words like eq, fig etc which might be better included in a stop words list.
+
+Lets investigate a few stop words
+
+
+```{r}
+
+library(stringr)
+
+physics %>% 
+  filter(str_detect(text,"eq\\."))
+
+  
+
+```
+
+Eq refers to an equation. RElated stop words are gif, file etc.
+Lets remove them
+
+
+```{r,message=FALSE}
+
+mystopwords_phy <- data_frame(word = c("eq", "co","rc","ac","ak","bn","fig", "file", "cg", "cb", "cm"))
+
+
+physics_words <- physics_words %>% 
+  anti_join(mystopwords_phy)
+
+
+
+plot_physics <- physics_words %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word=factor(word,levels=rev(unique(word)))) %>% 
+  group_by(author) %>% 
+  top_n(15,tf_idf) %>% 
+  ungroup %>% 
+  mutate(author = factor(author,levels = c("Galilei, Galileo",
+                                            "Huygens, Christiaan",
+                                            "Tesla, Nikola",
+                                            "Einstein, Albert")))
+
+  
+
+ggplot(plot_physics,aes(word,tf_idf,fill=author))+
+  geom_col()+
+  facet_wrap(~author,ncol = 2,scales="free")+
+  coord_flip()
+
+  
+
+
+```
+

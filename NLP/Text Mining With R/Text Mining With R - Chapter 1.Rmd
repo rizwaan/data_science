@@ -1,0 +1,287 @@
+---
+title: "Text Mining With R"
+output: html_document
+---
+
+[Source : Text Mining With R](http://tidytextmining.com/tidytext.html#the-unnest_tokens-function)
+
+## Chapter 1 : The tidy text format
+
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+getwd()
+```
+
+### Package Management
+
+```{r, message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(tidytext)
+
+```
+
+
+### The unnest_tokens function
+
+All text needs to be converted to tidy format using the unnest_tokens function.
+
+Load some sample text
+
+```{r}
+
+text <- c("Because I could not stop for Death -",
+          "He kindly stopped for me -",
+          "The Carriage held but just Ourselves -",
+          "and Immortality")
+
+text
+str(text)
+
+
+```
+
+
+
+Convert to data frame
+
+```{r}
+
+text_df<-data_frame(line=1:4,text=text)
+text_df
+
+```
+
+Break into tokens now
+
+```{r}
+text_df %>% 
+  unnest_tokens(word,text) # Output column, input col
+  
+```
+
+This automatically removes punctuations, lowers the case etc.
+
+### Tidying the works of Jane Austen
+
+Load thw books 
+
+```{r , warning=FALSE}
+
+library(stringr)
+library(janeaustenr)
+library(dplyr)
+
+original_books <- austen_books() %>%
+  group_by(book) %>%
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]",
+                                                 ignore_case = TRUE)))) %>%
+  ungroup()
+
+original_books
+
+  
+
+
+```
+
+
+DF is already in tidy form. 
+Restructure using unnest function
+
+```{r}
+
+library(tidytext)
+
+original_books %>% 
+  unnest_tokens(word,text)->tidy_text
+
+head(tidy_text)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Each row in this df now has a word as a token.
+Token units can be changed to sentenence etc.
+
+
+Remove stop words using the built in stop words df and the anti join function
+
+```{r}
+
+data("stop_words") #comes with the package
+head(stop_words)
+
+tidy_text %>% 
+  anti_join(stop_words)->tidy_text  
+
+head(tidy_text)
+
+```
+
+
+
+
+Find most frequent words from this new DF
+```{r}
+
+tidy_text %>% 
+  count(word,sort=TRUE)
+```
+
+
+
+
+
+
+
+Plot these words
+
+```{r}
+
+library(ggplot2)
+
+tidy_text %>% 
+  count(word,sort=TRUE) %>% 
+  filter(n>600) %>% 
+  mutate(word=reorder(word,n)) %>% 
+  ggplot(aes(word,n))+
+  geom_col()+
+  coord_flip()
+
+
+```
+
+
+### Comparing Word frequencies across different novels
+
+We find some novels of the same era as that of Jane Austen's and compare these works in terms of word freq.
+
+Below novels are considered..
+
+Author          Novel
+--------        ----------
+HG wells         The Time Machine
+HG wells         The War of the Worlds
+HG wells         The Invisible Man
+HG wells         The Island of Doctor Moreau
+Brontë sisters   Jane Eyre
+Brontë sisters   Wuthering Heights 
+Brontë sisters   The Tenant of Wildfell Hall 
+Brontë sisters   Villette 
+Brontë sisters   Agnes Grey
+
+
+
+```{r}
+library(gutenbergr)
+
+hgwells <- gutenberg_download(c(35, 36, 5230, 159))
+
+
+tidy_hgwells<-hgwells %>% 
+  unnest_tokens(word,text) %>% 
+  anti_join(stop_words)
+
+head(tidy_hgwells)
+
+
+
+```
+
+
+
+Finding the most freq words in HG Wells novels
+
+```{r}
+tidy_hgwells %>% 
+  count(word,sort=TRUE)
+
+```
+
+
+Same excercise with the Bronte sisters novels
+
+```{r}
+
+
+bronte <- gutenberg_download(c(1260, 768, 969, 9182, 767))
+
+tidy_bronte <- bronte %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words)
+
+tidy_bronte %>%
+  count(word, sort = TRUE)
+```
+
+
+
+Lets do this excercise with all novels combined
+
+```{r}
+library(tidyr)
+
+frequency<-bind_rows( mutate(tidy_text,author="Jane Austin"),
+                      mutate(tidy_bronte,author="Bronte Sisters"),
+                      mutate(tidy_hgwells,author="HG Wells")) %>% 
+  mutate(word = str_extract(word, "[a-z']+")) %>%       ## To make _any_ and any similar. Issue with gutenberg encoding
+  count(author, word)%>% 
+  group_by(author) %>% 
+  mutate(proportion=n/sum(n)) %>% 
+  select(-n) %>% 
+  spread(author,proportion) %>% 
+  gather(author,proportion,`Bronte Sisters`:`HG Wells`)
+
+
+
+
+
+frequency
+
+
+```
+
+
+Plot the proportion of the word freq with jane austin's word freq
+
+```{r}
+
+library(scales)
+
+# expect a warning about rows with missing values being removed
+ggplot(frequency, aes(x = proportion, y = `Jane Austin`, color = abs(`Jane Austin` - proportion))) +
+  geom_abline(color = "gray40", lty = 2) +
+  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
+  scale_x_log10(labels = percent_format()) +
+  scale_y_log10(labels = percent_format()) +
+  scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
+  facet_wrap(~author, ncol = 2) +
+  theme(legend.position="none") +
+  labs(y = "Jane Austin", x = NULL)
+
+```
+
+
+Words that are close to the line in these plots have similar frequencies in both sets of texts
+Words in the Austen-Brontë panel are closer to the zero-slope line than in the Austen-Wells panel
+Austen and the Brontë sisters use more similar words than Austen and H.G. Wells
+!

@@ -1,0 +1,364 @@
+---
+title: "Text Mining with R - Chapter 2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+[Source : Text Mining With R](http://tidytextmining.com/tidytext.html#the-unnest_tokens-function)
+
+
+## Chapter 2 Sentiment Analysis
+
+<br>
+
+### Sentiment Analysis Workflow
+
+<br>
+<br>
+![Sentiment Analysis](sa.png)
+
+
+### The Sentiments dataset
+
+Tidytext package includes 3 lexicons for evaluating sentiments
+
+The three general-purpose lexicons are
+
+- AFINN from Finn Årup Nielsen
+- bing from Bing Liu and collaborators
+- nrc from Saif Mohammad and Peter Turney
+
+
+```{r, warning=FALSE}
+
+library(tidytext)
+sentiments
+
+```
+
+
+
+Available lexicons
+
+```{r, warning=FALSE,message=FALSE}
+library(dplyr)
+sentiments %>% 
+  distinct(lexicon)
+  
+
+```
+
+
+Pulling the samples from each lexicon
+
+```{r}
+
+get_sentiments("afinn")  #scores from -5 to 5
+```
+
+```{r}
+get_sentiments("nrc") ## labeled sentiments
+
+```
+
+```{r}
+get_sentiments("bing") 
+```
+
+
+
+### Sentiment analysis with inner join
+
+With data in a tidy format, sentiment analysis can be done as an inner join
+
+Using the nrc lexicon, lets find the most common joy words in the works of jane Austen
+
+
+```{r, message=FALSE}
+library(janeaustenr)
+library(dplyr)
+library(stringr)
+
+tidy_books<-austen_books() %>% 
+  group_by(book) %>% 
+  mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]", 
+                                                 ignore_case = TRUE)))) %>% 
+  ungroup() %>% 
+  unnest_tokens(word,text)
+
+tidy_books
+
+```
+
+
+
+Lets find all the joy words in nrc lexicon
+
+```{r}
+nrcjoy<-get_sentiments("nrc") %>% 
+  filter(sentiment=="joy")
+
+
+
+```
+
+Find joy words in Emma
+
+```{r, message=FALSE}
+
+tidy_books %>% 
+  filter(book=="Emma") %>% 
+  inner_join(nrcjoy) %>% 
+  count(word,sort=TRUE)
+
+```
+
+<br>
+Note that these unigram based lexicons have the potential disadcantage that the sentiments can get averaged out over a text that has equal no of pos\neg words.
+
+A workaround is to use a fixed number of lines as a unit to evaluate sentiment and then derive the overall sentiment as the sum of such units.
+
+Here is a demo
+
+```{r, message=FALSE}
+library(tidyr)
+
+
+janeaustensentiment<-tidy_books %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  count(book,index=linenumber%%80,sentiment) %>% ## Unit of 80 lines
+  spread(sentiment,n) %>% 
+  mutate(sentiment=positive-negative)
+
+
+janeaustensentiment  
+  
+
+
+```
+
+
+We can plot the index wise sentiment for these books
+
+```{r}
+
+library(ggplot2)
+ggplot(janeaustensentiment,aes(index,sentiment,color=book))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~book,ncol=2,scales="free_x")
+  
+
+```
+
+
+
+### Comparing the three sentiment dictionaries
+
+Comaprison of the available lexicons for the same dataset
+
+We will use Pride and Prejudice to start
+```{r}
+
+pride_prejudice <- tidy_books %>% 
+  filter(book == "Pride & Prejudice")
+
+pride_prejudice
+
+
+
+
+```
+
+Use 80 lines unit to analyse sentiment usng all 3 lexicons
+
+```{r, message=FALSE}
+
+
+afinn<-pride_prejudice %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(index=linenumber%/%80) %>% 
+  summarise(sentiment=sum(score)) %>% 
+  mutate(method="AFINN")
+
+
+bing<-pride_prejudice %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  mutate(method="Bing")
+
+nrc<-pride_prejudice %>% 
+  inner_join(get_sentiments("nrc")) %>% 
+  filter(sentiment %in% c("positive","negative")) %>% 
+  mutate(method="NRC")
+
+
+
+bing_nrc<-bind_rows(bing,nrc) %>% 
+  count(method,index=linenumber%/%80,sentiment) %>% 
+  spread(sentiment,n,fill=0) %>% 
+  mutate(sentiment=positive-negative)
+
+  
+afinn
+
+bing_nrc 
+  
+bind_rows(afinn,bing_nrc)
+
+```
+
+
+Time to plot 
+
+```{r}
+
+bind_rows(afinn,bing_nrc) %>% 
+  ggplot(aes(index,sentiment,color=method))+
+  geom_col(show.legend = FALSE)+
+  facet_wrap(~method,ncol=1,scales="free_y")
+
+
+```
+
+While the absolute values of the sentiments are more pronounced in AFINN, overall trajectory is similar across the lexicons.
+
+
+### Most common positive and negative words
+
+Finding the contribution of words to respective sentiments.
+
+
+```{r,message=FALSE}
+
+
+bing_word_counts<-tidy_books %>% 
+  inner_join(get_sentiments("bing")) %>% 
+  count(word,sentiment,sort=TRUE) 
+  
+
+bing_word_counts
+
+```
+
+
+
+Visually
+
+```{r}
+
+bing_word_counts %>% 
+  group_by(sentiment) %>% 
+  top_n(10) %>% 
+  ungroup() %>% ## required for reorder
+  mutate(word=reorder(word,n)) %>% 
+  ggplot(aes(word,n,fill=sentiment))+
+  geom_col()+
+  facet_wrap(~sentiment,scales="free_y")+
+  coord_flip()
+
+
+```
+
+Miss is a title and hence shouldnt be a negative sentiment.
+Need to remove stop words
+
+```{r, message=FALSE}
+
+
+my_stop_words<-bind_rows(stop_words,
+          data.frame(word=c("miss"),lexicon=c("custom")))
+
+
+my_stop_words
+```
+
+
+
+### Wordclouds
+
+```{r, message=FALSE}
+
+library(wordcloud)
+
+tidy_books %>% 
+  anti_join(stop_words) %>% 
+  count(word) %>% 
+  with(wordcloud(word,n,max.words=100))
+
+
+
+
+```
+
+
+Tagging word polarity in a wordcloud
+
+
+```{r, message=FALSE}
+
+
+library(reshape2)
+
+tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>% 
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>% 
+  comparison.cloud(max.words=100)
+
+```
+
+
+### Looking at units beyond just words
+
+Instead of unigrams, larger units like sentences can also be employed for Sentiment Analysis
+
+
+
+```{r}
+
+
+head(prideprejudice,10) ## inbuilt dataset, is a character vector. Needs to be converted to df before any processing 
+
+
+PandP_sentences <-data_frame(text=prideprejudice) %>% 
+  unnest_tokens(sentence,text,token="sentences")
+
+PandP_sentences 
+
+```
+  
+
+
+Lets find the negative word ratio by chapter for Austen's work
+
+```{r, message=FALSE}
+
+# Get all negative words from bing lexicon
+bingnegative <- get_sentiments("bing") %>% 
+  filter(sentiment == "negative")
+
+
+# Count total words in every chapter of each book
+
+wordcounts <-tidy_books %>% 
+  group_by(book, chapter) %>% 
+  summarise(words=n())
+
+
+tidy_books %>% 
+  semi_join(bingnegative) %>% 
+  group_by(book,chapter) %>% 
+  summarise(negativewords=n()) %>% 
+  left_join(wordcounts,by=c("book","chapter")) %>% 
+  mutate(neg_ratio=negativewords/words) %>% 
+  filter(chapter!=0) %>% 
+  top_n(3) %>%  # groups with top values for negative words
+  ungroup()
+
+  
+
+```
+
