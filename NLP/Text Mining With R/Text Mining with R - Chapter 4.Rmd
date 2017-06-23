@@ -1,0 +1,591 @@
+---
+title: "Text Mining with R - Chapter 4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+[Source : Text Mining With R](http://tidytextmining.com/tidytext.html#the-unnest_tokens-function)
+
+
+## Relationships between words: n-grams and correlations
+
+In this section we explore text using multiple words as units as opposed to a single word.
+We will also try to find correlation and co-occurences between words.
+
+
+
+***
+### Tokenizing by n-gram
+
+
+ngrams can be generated using the tokn_ngram argument of the unnest function.
+
+
+```{r, message=FALSE}
+
+library(dplyr)
+library(tidytext)
+library(janeaustenr)
+
+
+
+
+austen_bigrams <- austen_books() %>% 
+  unnest_tokens(bigram, text, token="ngrams", n=2)
+
+
+austen_bigrams
+
+```
+
+
+#### Counting and filtering n-grams
+
+Lets find the most frequent bigrams
+
+```{r}
+
+austen_bigrams %>% 
+  count(bigram,sort=TRUE)
+
+```
+
+
+Need to remove stopwords here. Can be done by separating the bigrams into unigrams and then uniting them
+
+
+Lets split the bigrams first
+
+```{r}
+library(tidyr)
+
+bigrams_sep <- austen_bigrams %>% 
+  separate(bigram,c("word1","word2"),sep=" ")
+
+bigrams_sep
+
+```
+
+
+Now remove the stop words
+
+```{r}
+bigrams_filtered <- bigrams_sep %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word)
+
+bigrams_filtered
+
+```
+
+Lets count the new bigram freq
+
+```{r}
+
+
+bigram_counts <- bigrams_filtered %>% 
+  count(word1,word2,sort=TRUE)
+
+bigram_counts
+
+```
+
+We can now combine these  words back into bigrams
+
+```{r}
+
+bigrams_united <- bigrams_filtered %>% 
+  unite(bigram,word1,word2,sep=" ")
+
+bigrams_united 
+
+
+```
+
+
+We can do all this with trigrams as well
+
+
+```{r}
+
+austen_books() %>% 
+  unnest_tokens(trigram,text,token="ngrams",n=3) %>% 
+  separate(col = trigram,into = c("word1","word2","word3"),sep=" ") %>% 
+  filter(!word1 %in% stop_words$word) %>% 
+  filter(!word2 %in% stop_words$word) %>% 
+  filter(!word3 %in% stop_words$word) %>% 
+  count(word1,word2,word3,sort=TRUE)
+
+
+```
+
+
+#### Analyzing bigrams
+
+
+Bigrams can be used for exploration of the text as well..
+
+
+```{r}
+
+bigrams_filtered %>% 
+  filter(word2=="street") %>% 
+  count(word1,word2,sort=TRUE)
+
+```
+
+
+
+We can calculate and plot TFIDF on bigrams just like we did for single words
+
+```{r}
+
+bigrams_tfidf <- bigrams_united %>% 
+  count(book,bigram,sort=TRUE) %>% 
+  ungroup() %>% 
+  bind_tf_idf(bigram,book,n) %>% 
+  arrange(desc(tf_idf))
+  
+
+bigrams_tfidf 
+```
+
+Lets plot the bigrams with highest tfidf in every novel
+
+
+```{r}
+library(ggplot2)
+
+bigrams_tfidf_plot <- bigrams_tfidf %>% 
+  group_by(book) %>% 
+  top_n(20) %>% 
+  ungroup() %>% 
+  mutate(bigram=reorder(bigram,tf_idf)) %>% 
+  arrange(desc(tf_idf))
+  
+  
+  
+  
+bigrams_tfidf_plot
+
+
+
+
+```
+
+Plot
+
+```{r}
+library(ggthemes)
+
+bigrams_tfidf_plot %>% 
+  ggplot(aes(bigram,tf_idf,color=book))+
+  geom_col()+
+  facet_wrap(~book,ncol=3,scales="free")+
+  coord_flip()+
+  theme_tufte()
+  
+
+```
+
+
+Most of these top bigrams are names of people or places.  
+Others are verbs adjacent to names.  
+Bigrams are useful for providing context in large texts.
+
+
+
+
+#### Using bigrams to provide context in sentiment analysis
+
+Bigams can be used to identify negation effects like  "not happy" etc in a sentence.
+
+
+Lets start with the words following "Not"
+```{r}
+
+bigrams_sep %>% 
+  filter(word1=="not") %>% 
+  count(word1,word2,sort=TRUE)
+
+
+
+```
+
+By performing sentiment analysis on the bigram data, we can examine how often sentiment-associated words are preceded by “not” or other negating words.  
+We could use this to ignore or even reverse their contribution to the sentiment score.
+
+
+As an example lets use the AFINN data again
+
+```{r}
+
+
+afinn <- get_sentiments("afinn")
+afinn
+
+
+```
+
+
+Lets find the most frequent words which were preceded by not and were associated with a sentiment
+
+
+```{r}
+
+not_words <- bigrams_sep %>% 
+  filter(word1=="not") %>% 
+  inner_join(afinn,by=c("word2"="word")) %>% 
+  count(word2,score,sort=TRUE)
+
+
+not_words
+
+```
+
+This implies that the most common word preceded by "not" was "Like".  
+Like has a positive score of 2 ; without taking the negation into consideration, positive  sentiment gets a big lift due to "like"'s freq occurence.  
+
+We can identify which words contribute the most to the wrong sentiment.
+A contribution metric factoring in the terms freq and sentiment score can be used.  
+So that a word with a score of +3 occurring 10 times has as much impact as a word with a sentiment score of +1 occurring 30 times
+
+
+
+```{r}
+
+not_words %>% 
+  mutate(contribution=n*score) %>% 
+  arrange(desc(abs(contribution)))  %>% 
+  head(20) %>%
+  mutate(word2=reorder(word2,contribution)) %>%
+  ggplot(aes(word2,contribution,color=contribution>0))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()
+
+```
+
+Here... "like" and "help" contributed the most worngly to positive sentiment.
+"Afraid" and "fail" accentuated the negative sentiment similarly.
+
+
+We can expand the list of negative words and understand their impact.
+
+```{r}
+
+negation_words <- c("not", "no", "never", "without")
+
+negatd_words <- bigrams_sep %>% 
+  filter(word1 %in% negation_words) %>% 
+  inner_join(afinn,by=c("word2"="word")) %>% 
+  count(word1,word2,score,sort=TRUE)
+  
+  
+negatd_words
+
+```
+
+
+Lets plot them 
+
+
+```{r}
+
+negatd_words_plot <- negatd_words %>% 
+  mutate(contribution=n*score
+         ,word2=reorder(paste(word2, word1, sep = "__"),contribution)) %>%
+group_by(word1) %>%
+top_n(20,abs(contribution))
+  
+  
+  
+  
+
+
+negatd_words_plot
+
+  
+
+
+
+```
+
+
+```{r}
+
+negatd_words_plot %>% 
+  ggplot(aes(word2,contribution,fill=contribution>0))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~word1,ncol = 2,scales = "free")+
+    scale_x_discrete(labels = function(x) gsub("__.+$", "", x))
+
+```
+
+
+#### Visualizing a network of bigrams with ggraph
+
+To do this, first we create a graph object with igraph and then visualize it with ggrapgh
+
+
+```{r, message=FALSE}
+
+library(igraph)
+
+bigram_graph <- bigram_counts %>% 
+  filter(n>20) %>% 
+  graph_from_data_frame()
+
+
+bigram_graph
+
+```
+
+
+
+Plot the graph
+
+```{r}
+
+library(ggraph)
+
+
+ggraph(bigram_graph, layout = "fr")+
+  geom_edge_link()+
+  geom_node_point()+
+  geom_node_text(aes(label=name),vjust = 1, hjust = 1)
+
+
+```
+
+Some polishing to make the graph pretty
+
+
+```{r}
+set.seed(2016)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+
+```
+
+
+#### Visualizing bigrams in other texts
+
+Create wrapper functions for graph display and creation from prev section
+
+
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tidytext)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+
+
+
+
+count_bigrams <- function(dataset) {
+  dataset %>%
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+    separate(bigram, c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word,
+           !word2 %in% stop_words$word) %>%
+    count(word1, word2, sort = TRUE)
+}
+
+visualize_bigrams <- function(bigrams) {
+  set.seed(2016)
+  a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+  
+  bigrams %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a) +
+    geom_node_point(color = "lightblue", size = 5) +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+    theme_void()
+}
+
+
+
+```
+
+We can use this to work with King James version og bible
+
+
+```{r}
+
+
+library(gutenbergr)
+kjv <- gutenberg_download(10)
+
+kjv
+
+```
+
+
+
+Get bigrams and do cleanup
+
+
+```{r}
+
+library(stringr)
+
+kjv %>% 
+  count_bigrams() %>% 
+  filter(n>40,
+         !str_detect(word1,"\\d"),
+         !str_detect(word2,"\\d")) %>%  ## remove digits
+  visualize_bigrams()
+
+
+
+```
+
+***
+### Counting and correlating pairs of words with the widyr package
+
+In this section, we focus on finding correlations amongst words that occur together in the same document; these words need not be following each other.
+We use the widyR package for this purpose.
+
+
+#### Counting and correlating among sections
+
+
+Lets find the words that appear in the same 10-line section of the book "Pride and Prejudice"
+
+First lets add a section number and remove stop words
+
+```{r, message=FALSE}
+
+austen_section_words <- austen_books() %>% 
+  filter(book=="Pride & Prejudice") %>% 
+  mutate(section=row_number()%/%10) %>% 
+  filter(section>0) %>% 
+  unnest_tokens(word,text) %>% 
+    filter(!word %in% stop_words$word)
+  
+
+austen_section_words
+
+
+
+
+
+```
+
+We will use the widyr package to count occurances of word-pairs in the same section
+
+```{r}
+library(widyr)
+
+word_pairs <- austen_section_words %>% 
+  pairwise_count(word,section,sort=TRUE)
+
+
+word_pairs
+
+```
+
+We can now zone in for a particular word
+
+
+```{r}
+word_pairs %>% 
+  filter(item1=="darcy")
+
+
+```
+
+
+This shows all the words that occur within the same section as "darcy"
+
+#### Pairwise correlation
+
+
+A better way to analyze co-occurence is to use [Phi Coefficient](https://en.wikipedia.org/wiki/Phi_coefficient) 
+Phi Coeff is similar to Pearson Coeff and signifies the strength of correlation between the terms.
+
+
+The pairwise_cor() function in widyr lets us find the phi coefficient between words based on how often they appear in the same section
+
+```{r}
+
+# Remove common words
+
+word_cors <- austen_section_words %>% 
+  group_by(word) %>% 
+  filter(n()>20) %>% 
+  pairwise_cor(word,section,sort=TRUE)
+
+
+word_cors
+
+
+```
+
+We can now pick a word and analyze its associated words
+
+```{r}
+
+word_cors %>% 
+  filter(item1=="catherine")
+```
+
+Another example with some common words as anchors
+
+
+```{r,message=FALSE}
+
+
+word_cors %>%
+  filter(item1 %in% c("elizabeth", "pounds", "married", "pride")) %>% 
+  group_by(item1) %>% 
+  top_n(6) %>% 
+  ungroup() %>%  ## need to add else messes up the order of items
+  mutate(item2=reorder(item2,correlation)) %>% 
+  ggplot(aes(item2, correlation))+
+  geom_col()+
+  facet_wrap(~item1,ncol=2,scales="free")+
+  coord_flip()
+
+```
+
+
+We can also create a network of correlated networks
+
+
+```{r, message=FALSE}
+
+
+word_cors %>%
+  filter(correlation > .15) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()
+
+```
+
+
+This network shows correlated words which occur frequently within the same section; also we see words that appear close to each other.
+
+
+
