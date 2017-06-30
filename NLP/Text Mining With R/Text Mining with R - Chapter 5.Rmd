@@ -1,0 +1,192 @@
+---
+title: "Text Mining with R - Chapter 4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+[Source : Text Mining With R](http://tidytextmining.com/tidytext.html#the-unnest_tokens-function)
+
+
+
+### Converting to and from Nontidy Formats
+
+Tidytext is a relatively new package which has introduced the tody format for text corpus.
+Conversion from tidy to non-tidy format is required to ensure compatibility with other packages.
+
+e.g the TM package relies on a Document Term Matrix format , after which all NLP analysis is possible.
+
+<br>
+<br> 
+
+#### Tidying a document-term matrix
+
+Tidytext package provides below functions for this purpose  
+
+- tidy() turns a document-term matrix into a tidy data frame  
+- cast() turns a tidy corpus into dtm  
+- cast_sparse() turns a tidy corpus into a sparse dtm  
+
+
+A typical workflow for the overall analysis is as below  
+<br>
+<br>
+![Workflow](format.png)
+
+
+
+##### Tidying DocumentTermMatrix Objects
+
+
+Lets work with the tm package data to showcase the conversion
+
+```{r, message=FALSE}
+
+library(tm)
+library(topicmodels)
+
+data("AssociatedPress")
+
+AssociatedPress
+
+
+```
+
+This is a very sparse matrix as seen here.
+
+To use tidy tools for analysis this text, we need to convert it into tidy format
+
+
+```{r, message=FALSE}
+
+library(dplyr)
+library(tidytext)
+
+ap_td <- tidy(AssociatedPress)
+ap_td
+
+
+```
+
+The tidy version omits all zero entries in a document compared to a DTM.
+
+Lets analyze the sentiments
+
+```{r}
+
+
+ap_sentiment <- ap_td %>% 
+  inner_join(get_sentiments("bing"),by=c(term="word"))
+
+ap_sentiment
+```
+
+Lets plot the common words in either direction
+
+
+```{r, message=FALSE}
+
+library(ggplot2)
+library(ggthemes)
+
+ap_sentiment %>% 
+  count(sentiment,term,wt=count,sort=TRUE) %>% 
+  filter(n>200) %>% 
+  mutate(n=if_else(sentiment=="negative",-n,n)) %>% 
+  mutate(term=reorder(term,n)) %>% 
+  ggplot(aes(term,n,fill=sentiment))+
+  geom_bar(stat="identity")+
+  coord_flip()
+  
+
+  
+
+
+
+```
+
+##### Tidying dfm objects
+
+
+An alternative to DTMs of the TM package is the dfm (document-feature matrix) class of quanteda package
+
+```{r, message=FALSE}
+
+library(quanteda)
+
+data("inaugTexts",package = "quanteda")
+
+inaug_dfm <- dfm(inaugTexts,verbose = FALSE)
+inaug_dfm
+
+
+
+```
+
+
+
+
+
+Lets tidy up this corpus
+
+```{r}
+
+tidy(inaug_dfm)
+
+inaug_td <- tidy(inaug_dfm) %>% 
+  anti_join(stop_words,by=c(term="word"))
+
+inaug_td
+
+```
+
+
+
+
+```{r}
+
+inaug_tf_idf <- inaug_td %>% 
+  bind_tf_idf(term,document,count) %>% 
+  arrange(desc(tf_idf))
+
+inaug_tf_idf
+
+```
+
+
+
+Lets plot imp words from a handful of addresses
+
+
+```{r}
+
+library(ggplot2)
+
+
+inaug_tf_idf_plot <- inaug_tf_idf %>% 
+  filter(document %in% c("1933-Roosevelt", "1861-Lincoln",
+              "1961-Kennedy", "2009-Obama")) %>% 
+  
+  group_by(document) %>% 
+  top_n(10,tf_idf) %>% 
+  ungroup() %>%
+  mutate(term=reorder(term,tf_idf)) 
+
+  
+inaug_tf_idf_plot %>% 
+  ggplot(aes(term,tf_idf,fill=document)) +
+  geom_col()+
+  facet_wrap(~document,scales="free")+
+  coord_flip()
+  
+  
+
+```
+
+Note: Quanteda's tokenizer includes ? as a term.
+
+
+
+
+
