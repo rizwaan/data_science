@@ -187,6 +187,92 @@ inaug_tf_idf_plot %>%
 Note: Quanteda's tokenizer includes ? as a term.
 
 
+Another example where we visualize the terms by year
+
+
+```{r}
+
+library(tidyr)
+year_term_counts <- inaug_td %>% 
+  extract(document,"year","(\\d+)",convert=TRUE) %>% 
+  complete(year,term,fill=list(count=0)) %>% 
+  group_by(year) %>% 
+  mutate(year_total=sum(count))
+  
+
+
+year_term_counts
+
+
+```
+
+Lets pick a few words and visualize their frequency over the years
+
+
+```{r}
+
+year_term_counts %>%
+  filter(term %in% c("god", "america", "foreign", "union", "constitution", "freedom")) %>%
+  
+  ggplot(aes(year,count/year_total))+
+  geom_line()+
+  geom_smooth()+
+  facet_wrap(~term,scales = "free")+
+  scale_y_continuous(labels = scales::percent_format())+
+  ylab("Percent freq of word in inaugaral address ")
+
+
+```
 
 
 
+### Casting tidy text data into a matrix
+
+Some pakages might require DTMs as input.
+Tidytext provides some function to facilitate this.
+
+
+```{r}
+
+ap_td %>% 
+  cast_tdm(term,document,count)
+
+
+
+```
+
+Like TDM, there is an alternate DTM and DFM function too.
+
+
+e.g we can generate a sparse matrix
+
+```{r}
+
+ap_td %>% 
+  cast_sparse(document,term,count) %>% 
+  dim()
+
+```
+
+Note the relatively fewer rows in this sparse matrix compared to 302k entries previously
+
+Another example..
+
+```{r}
+
+library(janeaustenr)
+
+austen_dtm <- austen_books() %>% 
+  unnest_tokens(word,text) %>% 
+  count(book,word) %>% 
+  cast_dtm(book,word,n)
+
+
+austen_dtm
+
+
+```
+
+
+
+### Tidying corpus objects with metadata
