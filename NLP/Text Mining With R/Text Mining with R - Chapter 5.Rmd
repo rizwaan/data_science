@@ -1,5 +1,5 @@
 ---
-title: "Text Mining with R - Chapter 4"
+title: "Text Mining with R - Chapter 5"
 output: html_document
 ---
 
@@ -276,3 +276,282 @@ austen_dtm
 
 
 ### Tidying corpus objects with metadata
+
+
+Apart from DTM objects, the tm package supports corpus objects.  
+Corpus contains metadata along with text.  
+While converting to tidy format, we can extract metadata from corpus objects as well.  
+
+
+Lets play with the acq dataset from tm package which is a collection of 50 news articles from Reuters
+
+```{r, message=FALSE}
+
+library(tm)
+
+data(acq)
+acq
+
+```
+
+Sample a single document
+
+```{r}
+acq[[1]]
+
+```
+
+
+Actual content of this document
+
+```{r}
+inspect(acq[[1]])
+
+
+```
+
+Metadata for this document
+
+```{r}
+meta(acq[[1]])
+
+```
+
+
+
+Converting to tidy format gives all metadata and text in one shot
+
+
+```{r}
+
+acq_td <- tidy(acq)
+
+acq_td
+
+```
+
+We can then unnest tokens as always
+
+
+```{r}
+
+acq_tokens <- acq_td %>% 
+  select(-places) %>%  ## unnest throws error if any column is a list
+  unnest_tokens(word,text) %>% 
+  anti_join(stop_words,by="word")
+
+acq_tokens
+
+```
+
+Lets find some common words
+
+```{r}
+
+acq_tokens %>% 
+  count(word,sort=TRUE)
+
+```
+
+Generate tfidf
+
+```{r}
+acq_tokens %>% 
+  count(id,word,sort=TRUE) %>% 
+  bind_tf_idf(word,id,n)
+  
+  
+
+```
+
+
+
+#### Example: Mining Financial Articles
+
+
+We will web mine finance articles for some major tech companies in this section.
+
+```{r, message=FALSE}
+
+
+library(tm.plugin.webmining)
+library(purrr)
+
+company <- c("Microsoft", "Apple", "Google", "Amazon", "Facebook")#,"Twitter") #, "IBM", "Yahoo", "Netflix")
+symbol <- c("MSFT", "AAPL", "GOOG", "AMZN", "FB")#  , "TWTR")#,  "IBM", "YHOO", "NFLX")
+
+download_articles <- function(symbol) {
+  WebCorpus(GoogleFinanceSource(paste0("NASDAQ:", symbol)))
+}
+
+
+
+
+stock_articles <- data_frame(company,symbol) %>% 
+  mutate(corpus=map(symbol,download_articles))
+
+
+stock_articles
+
+
+
+
+```
+
+This dataframe holds the webcorpus in the last column.
+
+P.S: More on the [map functions](http://r4ds.had.co.nz/iteration.html#the-map-functions)
+
+
+Lets tokeninze these corpus and append to a single dataframe
+
+```{r}
+
+
+# map produces a list of 5 tibbles each of 20X8 dimension. Unnest unlists the elements and repeats every row of these tibbles for each company-symbol combination. It also produces a single dataframe
+
+stock_tokens <- stock_articles %>% 
+  unnest(map(corpus,tidy)) %>% 
+  unnest_tokens(word,text) %>% 
+  select(company, datetimestamp, word, id, heading)
+
+stock_tokens
+
+
+
+
+```
+
+Lets find the words most specific to these stocks using tfidf
+
+```{r,message=FALSE}
+
+library(stringr)
+
+
+stock_tfidf <- stock_tokens %>% 
+  count(company,word) %>% 
+  filter(!str_detect(word,"\\d")) %>%  # lot of numbers seen as tokens
+  bind_tf_idf(word,company,n) %>% 
+  arrange(-tf_idf)
+
+
+stock_tfidf
+
+
+```
+
+
+
+Now that we have the tfidfs lets plot by company
+
+
+```{r}
+stock_plot <- stock_tfidf %>% 
+  group_by(company) %>% 
+  top_n(10,tf_idf) %>%  ## Explicitly specifying the sort order
+  ungroup() %>% 
+  mutate(word=reorder(word,tf_idf)) %>% 
+  ggplot(aes(word,tf_idf,fill=company))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~company,scales = "free_y")
+
+stock_plot
+
+
+```
+
+These plots show the most characteristic words for the companies on any given day.
+
+
+
+We can further quantify the overall sentiment of the press coverage for these companies.
+This can be done by taking the ratio of difference between positive and negative words over the total number of words.
+
+Lets try this using the AFINN lexicon and find which words contribute the most to  either sentiment.
+
+
+```{r, message=FALSE}
+
+
+stock_tokens %>% 
+  anti_join(stop_words,by="word") %>% 
+  count(word,id,sort=TRUE)%>% 
+  inner_join(get_sentiments("afinn")) %>% 
+  group_by(word) %>% 
+  summarise(contribution=sum(n*score)) %>% 
+  top_n(15,abs(contribution)) %>% 
+  mutate(word=reorder(word,contribution)) %>% 
+  ggplot(aes(word,contribution))+
+  geom_col()+
+  coord_flip()+
+  ylab("Word Freq * Sentiment Score")
+
+  
+
+
+
+```
+
+This chart shows that AFINN is not a suitable lexicon for finance text.  
+e.g share is a positive word wherein it should have been a neutral term. Similarly fool (refers to Motley Fool publication) is incorrectly categorized as a negative term.  
+
+To overcome this we must use the  Loughran and McDonald dictionary of financial sentiment terms.  
+This dictionary was developed based on analyses of financial reports, and intentionally avoids words like “share” and “fool,” as well as subtler terms like “liability” and “risk” that may not have a negative meaning in a financial context.  
+
+
+The Loughran data divides words into six sentiments: “positive,” “negative,” “litigious,” “uncertain,” “constraining,” and “superfluous.”
+
+```{r}
+library(tidytext)
+
+stock_tokens %>% 
+  count(word) %>% 
+  inner_join(get_sentiments("loughran"),by="word") %>% 
+  group_by(sentiment) %>% 
+  top_n(5,n) %>% 
+  ungroup() %>% 
+  mutate(word=reorder(word,n)) %>% 
+  ggplot(aes(word,n,fill=sentiment))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~sentiment,scales="free")
+  
+  
+
+
+```
+
+
+These financial sentiments can further be explored to guage the overall press sentiment
+
+
+```{r, message=FALSE  }
+
+stock_sentiment_count <- stock_tokens %>% 
+  inner_join(get_sentiments("loughran"), by = "word") %>%
+  count(sentiment,company) %>% 
+  spread(sentiment,n,fill=0)
+
+stock_sentiment_count
+
+```
+
+
+```{r}
+
+stock_sentiment_count %>% 
+  mutate(score=(positive-negative)/(positive+negative)) %>% 
+  mutate(company=reorder(company,score)) %>% 
+  ggplot(aes(company,score,fill=score>0)) +
+  geom_col(show.legend = FALSE)+
+  coord_flip()
+  
+  
+
+```
+
+Thus we can conclude that in early July 2017, Google had a comparitively negative press sentiment as compared to MS and Apple
+
+
