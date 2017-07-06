@@ -1,0 +1,230 @@
+---
+title: "Text Mining with R - Chapter 6 - Topic Modeling"
+author: "Rizwaan Adil"
+date: "July 6, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+[Source : Text Mining With R](http://tidytextmining.com/topicmodeling.html#word-topic-probabilities)
+
+***
+## Topic modeling
+
+<br>
+This section elaborates on topic modeling using the topicmodels package in conjunction with tidytext.
+<br>
+Shown below is a typical workflow when working with the two packages
+
+![Topic Modeling Workflow with tidy and topic models](lda.png)
+
+
+***
+### Latent Dirichlet allocation
+
+
+
+
+LDA is a popular algorithm for topic modeling.   
+Guiding principles are  
+- Every document is a mixture of topics
+- Every topic is a mixture of words
+
+We use the AssociatedPress dataset in the topicmodels package to demo topic modeling.
+This is a standard sparse DTM 
+
+
+```{r, message=FALSE}
+
+library(topicmodels)
+
+
+data("AssociatedPress")
+AssociatedPress
+
+
+```
+
+
+Lets fit an LDA model on this dataset with 2 topics
+
+
+```{r}
+
+ap_lda <- LDA(AssociatedPress,k=2,control = list(seed=1234))
+ap_lda
+
+
+
+```
+
+After generating the LDA model, tidytext package can be used to explore and interpret it.  
+
+#### Word-topic probabilities
+
+The tidy function helps extract the per topic per word probabilty from the model.
+These probabilities are called beta probabilities and stored in a matrix
+
+
+```{r, message=FALSE}
+
+library(tidytext)
+
+ap_topics <- tidy(ap_lda,matrix="beta")
+
+ap_topics
+
+```
+
+This tidyset has a row for each  probability of a term being in a particular topic.  
+e.g the term has a higher probability of falling under topic 2.  
+
+
+Lets visualize the top terms in each topic
+
+First lets get the top 10 terms from each topic  
+
+```{r}
+library(dplyr)
+
+ap_top_terms <- ap_topics %>% 
+  group_by(topic) %>% 
+  top_n(10,wt = beta) %>%
+  ungroup 
+  
+
+ap_top_terms
+  
+
+```
+
+Lets visualize these terms now
+
+```{r}
+library(ggplot2)
+
+ap_top_terms %>% 
+  mutate(term=reorder(term,beta)) %>%  #converts term to factor implicitly while reordering
+  ggplot(aes(term,beta,fill=topic))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~topic,scales="free_y")
+
+
+```
+
+The first topic appears to be related to finance, the other being politics.
+Some words appear in both topics which is expected in a natural language.
+
+
+We can also find the terms which are very characteristic of the two topics.
+
+>TODO: Insert math equation
+
+
+First we prepare a dataset with a term per row for each topic.. 
+We also filter out uncommon words by using a large beta. 
+We also calculate the log ratio to quantify a terms contribution  
+
+```{r}
+
+library(tidyr)
+
+beta_spread <- ap_topics %>% 
+  mutate(topic=paste0("topic",topic)) %>% 
+  spread(topic,beta) %>% 
+  filter(topic1>1/1000|topic2>1/1000) %>% 
+  mutate(log_ratio=log2(topic2/topic1))  # positive log ratio meansthe term is more characteristic of topic 2
+
+
+beta_spread
+
+
+```
+
+
+We can now visualize it
+
+
+```{r}
+
+beta_spread_plot <- beta_spread %>% 
+  group_by(direction=log_ratio>0) %>% 
+  top_n(10,abs(log_ratio)) %>% 
+  ungroup()
+
+beta_spread_plot
+  
+```
+
+
+
+```{r}
+beta_spread_plot %>% 
+  mutate(term=reorder(term,log_ratio)) %>% 
+  ggplot(aes(term,log_ratio,fill=direction))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()
+  
+
+```
+
+
+This shows the characteristic words of the two topics
+
+
+#### Document-topic probabilities
+
+Gamma in the LDA model gives the document-topic probabilities
+
+
+```{r}
+
+ap_documents <- tidy(ap_lda,matrix="gamma")
+ap_documents
+
+```
+
+As per the tidy philosophy, we have a 1 row per document.
+e.g 96% words in document 15 were generated from topic 1; for document 6 the reverse is true, all of its words were generated from topic 2.
+
+
+Lets verify this by analyzing our DTM
+Lets pull the words for doc 15 (gamma close to 1)
+
+```{r}
+
+tidy(AssociatedPress) %>% 
+  filter(document==15) %>% 
+  arrange(desc(count))
+
+```
+This is definitely a finance (topic 1 article)
+
+We can thus postulate that document 6 would be a politics document as gamma is close to 0
+
+```{r}
+tidy(AssociatedPress) %>% 
+  filter(document==6) %>% 
+  arrange(desc(count))
+
+```
+This proves that the algorithm was correct in categorizing doc 6 under topic 2 - politics.  
+ 
+***
+### Example: the great library heist
+
+#### LDA on chapters
+
+#### Per-document classification
+
+#### By word assignments: augment
+
+
+
+***
+### Alternative LDA implementations
