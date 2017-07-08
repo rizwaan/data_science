@@ -218,11 +218,345 @@ This proves that the algorithm was correct in categorizing doc 6 under topic 2 -
 ***
 ### Example: the great library heist
 
+
+We will apply topic modeling to individual chapters from below books to demo LDA.
+
+- Great Expectations by Charles Dickens
+- The War of the Worlds by H.G. Wells
+- Twenty Thousand Leagues Under the Sea by Jules Verne
+- Pride and Prejudice by Jane Austen
+
+Lets get the text using the gutenbergr package
+
+```{r, message=FALSE}
+
+titles <- c("Twenty Thousand Leagues under the Sea", "The War of the Worlds",
+            "Pride and Prejudice", "Great Expectations")
+
+
+library(gutenbergr)
+
+books <- gutenberg_works(title %in% titles) %>%
+  gutenberg_download(meta_fields = "title")
+
+books
+
+```
+
+Preprocessing as usual, we divide into chapters which we will use as individual documents
+
+
+First we annotate the chapter number to the title for convenience (as each chapter will be treated as a document)
+
+```{r, message=FALSE}
+
+library(stringr)
+
+reg <- regex("^chapter ", ignore_case = TRUE)
+
+by_chapter <- books %>% 
+  group_by(title) %>% 
+  mutate(chapter=cumsum(str_detect(text,reg))) %>% 
+  ungroup() %>% 
+  filter(chapter>0) %>% 
+  unite(document,title,chapter)
+
+by_chapter
+
+  
+
+```
+
+
+Now we do the basic tidytext processing
+
+
+
+```{r}
+
+by_chapter_word <- by_chapter %>% 
+  unnest_tokens(word,text)
+
+  
+by_chapter_word
+
+```
+
+Remove stop words and get the word freq
+
+```{r}
+
+
+word_counts <- by_chapter_word %>% 
+  anti_join(stop_words,by="word") %>%
+  count(document,word,sort=TRUE)
+
+word_counts
+  
+```
+
+
+
+
 #### LDA on chapters
+
+
+To apply LDA on our tidy word_counts dataset, we first need to generate a DTM from it and then pass it on to LDA
+
+```{r}
+
+chapters_dtm <- word_counts %>% 
+  cast_dtm(document,word,n)
+
+chapters_dtm
+
+```
+
+
+
+
+```{r}
+
+chapters_lda <- LDA(chapters_dtm,k=4,control = list(seed=1234)) #
+chapters_lda
+
+```
+
+We can not tidy the generated LDA model
+
+First we get the beta matrix (topic-word prob)
+
+```{r}
+
+chapter_topics <- tidy(chapters_lda,matrix="beta")
+
+
+```
+
+Inference:  
+- Joe is characteristic if topic 4
+- Biddy is generated mostly from topic 4
+
+
+Next we find the top terms within each topic and visualize it
+
+```{r, message=FALSE}
+
+top_terms <- chapter_topics %>% 
+  group_by(topic) %>% 
+  top_n(5) %>% 
+  ungroup() %>% 
+  arrange(topic,-beta)
+
+top_terms
+
+
+```
+
+```{r}
+top_terms %>% 
+  mutate(term=reorder(term,beta)) %>% 
+  ggplot(aes(term,beta,fill=topic))+
+  geom_col(show.legend = FALSE)+
+  coord_flip()+
+  facet_wrap(~topic,scales="free_y")
+
+```
+
+These top words essentially characterize the respective novels.
+
 
 #### Per-document classification
 
+We can also examine the gamma matrix to understand association between document(chapters) and topics(book)
+
+```{r}
+chapter_gamma <- tidy(chapters_lda,matrix="gamma")
+chapter_gamma
+
+```
+
+We can drill down to a particular chapter for inference
+
+```{r}
+chapter_gamma %>% 
+  filter(document=="Great Expectations_57") %>% 
+  arrange(-gamma)
+```
+
+Here we see that the Chapter Great Expectations_57 has high probabilty of belonging to topic 4.
+We can verify this agains our original vector tht was fed to the algorithm
+
+```{r}
+titles
+```
+Topic 4 is indeed Great Expectations  
+
+
+
+We can take this a step further and hypothesize that all chapters from a book must have been associated to the same topic.
+If this is true, our algorigh will have a high accuracy
+
+
+
+
+```{r}
+
+chapter_gamma <- chapter_gamma %>% 
+  separate(document,c("title","chapter"),sep="_",convert=TRUE)
+
+chapter_gamma
+
+```
+
+
+
+```{r}
+chapter_gamma %>% 
+  mutate(title=reorder(title,topic*gamma)) %>% ## helps with reordering the plot
+  ggplot(aes(factor(topic),gamma))+
+  geom_boxplot()+
+  facet_wrap(~title)
+
+```
+
+Almost all chapter were assigned to a single topic(book).  
+That is however not the case with Great Expectations.
+
+We can find the misclassified  chapters by comparing the most common topic for a book's chapters with their top gamma topic.
+
+First lets find the topic classification for each title-chapter combo
+
+```{r}
+
+chapter_classifications <- chapter_gamma %>% 
+  group_by(title,chapter) %>% 
+  top_n(1,gamma)
+
+chapter_classifications
+
+```
+
+This shows that chapter 23 of Great Expectations was classified as topic 1(Pride and Prejudice).. indeed our first case of misclassifcation.  
+For the rest 9 cases in top 10 rows, the topic is correctly identified by LDA.  
+
+```{r}
+book_topics <- chapter_classifications %>% 
+  ungroup() %>% ## This line missing in the book, resulting in errors downstream 
+  count(title,topic) %>% 
+  group_by(title) %>% 
+  top_n(1,n) %>% 
+  ungroup() %>% 
+  transmute(consensus=title,topic)
+
+book_topics
+
+```
+
+
+```{r}
+chapter_classifications %>% 
+  inner_join(book_topics,by="topic") %>% 
+  filter(title!=consensus) 
+
+  
+  
+
+```
+
+We now have the 2 chapters which were miss classified.
+
+
+
 #### By word assignments: augment
+
+LDA assigns topic to individual words in a document and subsequently assigns a final topic to the document with the most votes.  
+The individual document word pair and respective topics can be retrieved using the augment function.  
+Augment uses an LDA model to annotate the original data.
+
+This will help us identify the misclassified words in the previous section
+
+
+
+```{r}
+
+assignments <- augment(chapters_lda,data=chapters_dtm)
+
+assignments
+
+
+```
+
+
+We will combine this dataset with the consensus data to understand which words were incorrectly classified
+
+```{r}
+#The consensus data 
+book_topics
+
+```
+
+
+```{r, message=FALSE}
+
+
+assignments <- assignments %>% 
+  separate(document,c("title","chapter"),sep="_",convert=TRUE) %>% 
+  inner_join(book_topics,by=c(".topic"="topic"))
+
+assignments
+
+
+```
+
+This dataset now has the actual book (title) along with the assigned topic(consensus) along with individual words.  
+We can now find the misclassified words
+
+```{r}
+library(scales)
+
+assignments %>% 
+  count(title,consensus,wt=count) %>% 
+  group_by(title) %>% 
+  mutate(percent=n/sum(n)) %>% 
+  ggplot(aes(consensus,title,fill=percent))+
+  geom_tile()+
+  scale_fill_gradient2(high="red",label=percent_format())+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        panel.grid = element_blank()) +
+  labs(x = "Book words were assigned to",
+       y = "Book words came from",
+       fill = "% of assignments")
+
+```
+
+
+This chart shows that Great Expectations had a few words misclassified under Pride and Prejudice and The War of the Worlds
+
+
+The words which were misaligned were...
+
+```{r}
+
+wrong_words <- assignments %>% 
+  filter(title!=consensus)
+
+wrong_words
+
+```
+
+
+```{r}
+
+wrong_words %>% 
+  count(title,consensus,term,wt=count,sort=TRUE)
+
+```
+
+The words love, sergeant etc appear to be common words between the two novels.
+Exception here is the word flopson which occured only in Great Expectations. This is a word where LDA misclassified.
+
 
 
 
