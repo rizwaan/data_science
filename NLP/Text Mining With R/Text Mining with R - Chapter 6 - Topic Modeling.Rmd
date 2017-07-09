@@ -562,3 +562,73 @@ Exception here is the word flopson which occured only in Great Expectations. Thi
 
 ***
 ### Alternative LDA implementations
+
+
+The LDA algorithm is also implemented by the mallet package with a different set of input requirements.  
+Tidytext works with mallet as well.  
+
+The mallet package does tokenization and stop word removal on its own.  
+It also requires a single text string per document.  
+Stop words are to be provided in a separate file.  
+With these inputs, we can train an LDA model and use it with tidytext
+
+```{r, message=FALSE}
+
+library(mallet)
+
+#convert the tidy dataset to one long string of words per chapter
+collapsed <- by_chapter_word %>% 
+  anti_join(stop_words,by="word") %>% 
+  mutate(word=str_replace(word,"'","")) %>% 
+  group_by(document) %>% 
+  summarise(text=paste(word, collapse=" "))
+
+
+collapsed
+  
+#Create a temp file to act as stop words file
+file.create(empty_file <-   tempfile())
+
+
+
+```
+
+Now we can generate the LDA model
+
+```{r, error=FALSE}
+
+docs <- mallet.import(collapsed$document,collapsed$text,empty_file)
+
+mallet_model <- MalletLDA(num.topics = 4)
+
+mallet_model$loadDocuments(docs)
+
+mallet_model$train(100)
+
+
+
+```
+
+We can now use the mallet model like we used topicmodel output
+```{r, message=FALSE}
+
+#topic word pairs
+tidy(mallet_model)
+
+```
+
+```{r}
+
+# document - topic pairs
+tidy(mallet_model,matrix="gamma")
+
+```
+
+We can also use augment on this model
+```{r}
+word_counts
+# column needs to be named "term" for "augment"
+term_counts <- rename(word_counts, term = word)
+augment(mallet_model, term_counts)
+```
+
