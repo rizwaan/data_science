@@ -1,4 +1,4 @@
-Master Repo for all Data Science mini Projects
+My Data Science playground
 ============
 
 This repo contains code for
@@ -6,4 +6,5 @@ This repo contains code for
  * Adhoc Tutorials
  * Mini Projects
 
- An effort has been made to describe concepts wherever possible for reuse
+ An effort has been made to describe concepts wherever possible for reuse.
+ Mostly for quick POCs or excercises
